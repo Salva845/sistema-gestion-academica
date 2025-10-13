@@ -10,6 +10,9 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 // Auth pages
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
+import Profile from './pages/Profile';
+import ResetPassword from './pages/auth/ResetPassword';
+import UpdatePassword from './pages/auth/UpdatePassword';
 
 // Dashboard pages
 import AdminDashboard from './pages/admin/Dashboard';
@@ -34,6 +37,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rutas públicas - Reset Password */}
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/update-password" element={<UpdatePassword />} />
         {/* Rutas públicas */}
         <Route
           path="/login"
@@ -74,6 +80,10 @@ function App() {
             )
           }
         />
+
+        {/* Ruta protegida - Profile (todos los roles) */}
+        <Route element={<ProtectedRoute allowedRoles={['admin', 'docente', 'estudiante']} />}>
+        <Route path="/profile" element={<Profile />} /></Route>
 
         {/* Rutas protegidas - Admin */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>

@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { User } from 'lucide-react';
 import { 
   Card, 
   CardContent, 
@@ -203,6 +204,14 @@ export default function EstudianteDashboard() {
             <Badge variant="secondary">Estudiante</Badge>
             <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => navigate('/profile')}
+              title="Mi Perfil"
+            >
+              <User className="h-5 w-5" />
             </Button>
             <Button variant="ghost" onClick={signOut} className="gap-2">
               <LogOut className="h-4 w-4" />
