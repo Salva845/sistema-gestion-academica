@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { User } from 'lucide-react';
+
 import { 
   Card, 
   CardContent, 
