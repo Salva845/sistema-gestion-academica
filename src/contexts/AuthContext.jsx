@@ -56,14 +56,23 @@ export const AuthProvider = ({ children }) => {
         .eq('user_id', userId)
         .single();
 
-      if (error) throw error;
-      setProfile(data);
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        throw error;
+      }
+
+      if (!data) {
+        console.warn('No se encontró perfil para el usuario.'); 
+        setProfile(null);
+      } else {
+        setProfile(data);
+      }
     } catch (error) {
       console.error('Error cargando perfil:', error.message);
     } finally {
       setLoading(false);
     }
   };
+
 
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({

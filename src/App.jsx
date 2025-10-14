@@ -19,6 +19,7 @@ import AdminDashboard from './pages/admin/Dashboard';
 import DocenteDashboard from './pages/docente/Dashboard';
 import EstudianteDashboard from './pages/estudiante/Dashboard';
 import Materias from './pages/admin/Materias';
+import Usuarios from './pages/admin/Usuarios';
 
 function App() {
   const { user, profile, loading } = useAuth();
@@ -90,6 +91,7 @@ function App() {
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/materias" element={<Materias />} />
+          <Route path="/admin/usuarios" element={<Usuarios />} />
         </Route>
 
         {/* Rutas protegidas - Docente */}
