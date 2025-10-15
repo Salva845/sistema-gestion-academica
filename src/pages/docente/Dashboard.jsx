@@ -293,11 +293,13 @@ export default function DocenteDashboard() {
                       <CardTitle className="text-lg">
                         {grupo.materias?.nombre || 'Sin nombre'}
                       </CardTitle>
-                      <CardDescription>
+
+                      <div>
                         <Badge variant="outline" className="text-xs">
                           {grupo.materias?.codigo || 'N/A'}
                         </Badge>
-                      </CardDescription>
+                      </div>
+
                     </CardHeader>
                     <CardContent className="space-y-2">
                       <div className="flex items-center text-sm text-muted-foreground">
