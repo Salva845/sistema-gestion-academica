@@ -22,7 +22,10 @@ import EstudianteDashboard from './pages/estudiante/Dashboard';
 // Paginas Admin
 import Materias from './pages/admin/Materias';
 import Usuarios from './pages/admin/Usuarios';
-import Grupos from './pages/admin/Grupos'; 
+import Grupos from './pages/admin/Grupos';
+
+// Paginas Docente
+import MisGrupos from './pages/docente/MisGrupos';
 
 function App() {
   const { user, profile, loading } = useAuth();
@@ -101,6 +104,7 @@ function App() {
         {/* Rutas protegidas - Docente */}
         <Route element={<ProtectedRoute allowedRoles={['docente']} />}>
           <Route path="/docente" element={<DocenteDashboard />} />
+          <Route path="/docente/misgrupos" element={<MisGrupos />} />
         </Route>
 
         {/* Rutas protegidas - Estudiante */}

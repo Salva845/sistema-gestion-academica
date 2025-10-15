@@ -252,7 +252,7 @@ export default function DocenteDashboard() {
                 <span className="text-sm">Registrar Calificaciones</span>
               </Button>
               <Button 
-                onClick={() => navigate('/docente/grupos')} 
+                onClick={() => navigate('/docente/MisGrupos')} 
                 className="h-24 flex flex-col gap-2"
                 size="lg"
                 variant="outline"
