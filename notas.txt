@@ -1,0 +1,27 @@
+-- Ejemplo para tabla de estudiantes
+SELECT 'DATOS: calificaciones' as info;
+SELECT * FROM calificaciones LIMIT 5;
+
+-- Ejemplo para tabla de materias
+SELECT 'DATOS: grupos' as info;
+SELECT * FROM grupos LIMIT 5;
+
+-- Ejemplo para tabla de grupos
+SELECT 'DATOS: grupos' as info;
+SELECT * FROM grupos LIMIT 5;
+
+-- Ejemplo para tabla de inscripciones
+SELECT 'DATOS: inscripciones' as info;
+SELECT * FROM inscripciones LIMIT 5;
+
+SELECT 'DATOS: materias' as info;
+SELECT * FROM materias LIMIT 5;
+
+SELECT 'DATOS: asistencias' as info;
+SELECT * FROM asistencias LIMIT 5;
+
+SELECT 'DATOS: audit_log' as info;
+SELECT * FROM audit_log LIMIT 5;
+
+SELECT 'DATOS: sesiones_clase' as info;
+SELECT * FROM sesiones_clase LIMIT 5;

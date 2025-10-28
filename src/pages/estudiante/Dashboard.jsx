@@ -346,7 +346,7 @@ export default function EstudianteDashboard() {
               <div className="text-center py-12">
                 <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">No tienes materias inscritas</p>
-                <Button className="mt-4" onClick={() => navigate('/estudiante/inscripcion')}>
+                <Button className="mt-4" onClick={() => navigate('/estudiante/materias')}>
                   Inscribir Materias
                 </Button>
               </div>

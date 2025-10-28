@@ -110,7 +110,6 @@ export default function Usuarios() {
     try {
       setLoading(true);
       
-      // Ahora email está en la tabla profiles, no necesitamos auth.admin
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -161,8 +160,6 @@ export default function Usuarios() {
 
         if (authError) throw authError;
 
-        // El trigger de Supabase creará automáticamente el perfil
-        // pero agregamos el role manualmente por si acaso
         if (authData.user) {
           await supabase
             .from('profiles')

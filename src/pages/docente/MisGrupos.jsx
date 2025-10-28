@@ -1,6 +1,6 @@
 // =========================================
 // src/pages/docente/MisGrupos.jsx
-// Vista de grupos asignados al docente
+// Vista de grupos asignados al docente - CORREGIDO
 // =========================================
 
 import { useState, useEffect } from 'react';
@@ -35,6 +35,7 @@ import {
   AlertCircle,
   UserCheck,
   TrendingUp,
+  Loader,
 } from 'lucide-react';
 
 export default function MisGrupos() {
@@ -44,6 +45,7 @@ export default function MisGrupos() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [periodoFilter, setPeriodoFilter] = useState('all');
+  const [creandoSesion, setCreandoSesion] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -70,6 +72,91 @@ export default function MisGrupos() {
       console.error('Error cargando grupos:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // FUNCIÓN CORREGIDA: Iniciar asistencia con todas las columnas requeridas
+  const handleIniciarAsistencia = async (grupoId) => {
+    try {
+      setCreandoSesion(grupoId);
+      
+      // Buscar el grupo para obtener su horario
+      const grupo = grupos.find(g => g.id === grupoId);
+      
+      const hoy = new Date().toISOString().split('T')[0];
+      
+      // Verificar si ya existe una sesión hoy
+      const { data: sesionExistente, error: errorBusqueda } = await supabase
+        .from('sesiones_clase')
+        .select('id')
+        .eq('grupo_id', grupoId)
+        .eq('fecha', hoy)
+        .maybeSingle();
+
+      if (errorBusqueda) throw errorBusqueda;
+
+      let sesionId;
+
+      if (sesionExistente) {
+        // Ya existe una sesión hoy
+        sesionId = sesionExistente.id;
+      } else {
+        // Generar token único para la sesión
+        const tokenSesion = `sesion_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Determinar hora_inicio y hora_fin
+        let horaInicio, horaFin;
+        
+        // Intentar extraer del horario del grupo
+        if (grupo?.horario) {
+          const match = grupo.horario.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/);
+          if (match) {
+            horaInicio = match[1] + ':00';
+            horaFin = match[2] + ':00';
+          }
+        }
+        
+        // Si no se pudo extraer, usar hora actual + 2 horas
+        if (!horaInicio) {
+          const ahora = new Date();
+          horaInicio = ahora.toTimeString().split(' ')[0];
+          horaFin = new Date(ahora.getTime() + 2 * 60 * 60 * 1000)
+            .toTimeString()
+            .split(' ')[0];
+        }
+        
+        // Calcular expira_en (1 hora después del inicio por defecto)
+        const expiraEn = new Date();
+        expiraEn.setHours(expiraEn.getHours() + 1);
+        
+        // Crear nueva sesión con todas las columnas requeridas
+        const { data: nuevaSesion, error: errorCrear } = await supabase
+          .from('sesiones_clase')
+          .insert([{
+            grupo_id: grupoId,
+            fecha: hoy,
+            hora_inicio: horaInicio,
+            hora_fin: horaFin,
+            token_sesion: tokenSesion,
+            expira_en: expiraEn.toISOString(),
+            tema: 'Clase del día',
+            activa: true,
+            qr_activo: false
+          }])
+          .select()
+          .single();
+
+        if (errorCrear) throw errorCrear;
+        sesionId = nuevaSesion.id;
+      }
+
+      // Navegar a la página de asistencia
+      navigate(`/docente/asistencia/${sesionId}`);
+    } catch (error) {
+      console.error('Error iniciando asistencia:', error);
+      alert('Error al iniciar asistencia. Por favor intenta de nuevo.');
+    } finally {
+      setCreandoSesion(null);
     }
   };
 
@@ -224,6 +311,7 @@ export default function MisGrupos() {
               {filteredGrupos.map((grupo) => {
                 const ocupacion = grupo.inscripciones?.[0]?.count || 0;
                 const porcentaje = Math.round((ocupacion / grupo.cupo_maximo) * 100);
+                const cargandoEsteGrupo = creandoSesion === grupo.id;
                 
                 return (
                   <Card key={grupo.id} className="hover:shadow-lg transition-shadow">
@@ -303,9 +391,17 @@ export default function MisGrupos() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => navigate(`/docente/asistencia?grupo=${grupo.id}`)}
+                            onClick={() => handleIniciarAsistencia(grupo.id)}
+                            disabled={cargandoEsteGrupo}
                           >
-                            Asistencia
+                            {cargandoEsteGrupo ? (
+                              <>
+                                <Loader className="w-4 h-4 mr-2 animate-spin" />
+                                Iniciando...
+                              </>
+                            ) : (
+                              'Asistencia'
+                            )}
                           </Button>
                           <Button 
                             variant="outline" 

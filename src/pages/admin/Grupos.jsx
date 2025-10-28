@@ -86,6 +86,20 @@ export default function Grupos() {
   const [grupoToDelete, setGrupoToDelete] = useState(null);
   const [message, setMessage] = useState({ type: '', text: '' });
   
+  const getDocenteFullName = (docente) => {
+    if (!docente) return 'Sin asignar';
+    
+    const d = Array.isArray(docente) ? docente[0] : docente;
+    if (!d) return 'Sin asignar';
+    
+    const nombre = d.nombre || '';
+    const apellido = d.apellido || '';
+    const nombreCompleto = `${nombre} ${apellido}`.trim();
+    
+    return nombreCompleto || 'Sin asignar';
+  };
+
+
   // Paginación
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -128,24 +142,85 @@ export default function Grupos() {
   };
 
   const loadGrupos = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('grupos')
-        .select(`
-          *,
-          materias (nombre, codigo),
-          docente:profiles!docente_id (nombre, apellido),
-          inscripciones (count)
-        `)
-        .order('periodo', { ascending: false });
+  try {
+    // 1. Cargar grupos
+    const { data: gruposData, error: gruposError } = await supabase
+      .from('grupos')
+      .select('*')
+      .order('periodo', { ascending: false });
 
-      if (error) throw error;
-      setGrupos(data || []);
-    } catch (error) {
-      console.error('Error cargando grupos:', error);
-      setMessage({ type: 'error', text: 'Error al cargar los grupos' });
+    if (gruposError) throw gruposError;
+
+    console.log('Grupos cargados:', gruposData?.length);
+
+    // 2. Obtener IDs únicos
+    const materiasIds = [...new Set(gruposData?.map(g => g.materia_id).filter(Boolean))];
+    const docentesIds = [...new Set(gruposData?.map(g => g.docente_id).filter(Boolean))];
+    const gruposIds = gruposData?.map(g => g.id) || [];
+
+    console.log('Docentes IDs a buscar:', docentesIds);
+
+    // 3. Cargar materias
+    const { data: materiasData } = await supabase
+      .from('materias')
+      .select('id, nombre, codigo')
+      .in('id', materiasIds);
+
+    // 4. Cargar docentes
+    const { data: docentesData, error: docentesError } = await supabase
+      .from('profiles')
+      .select('user_id, nombre, apellido')
+      .in('user_id', docentesIds);
+
+    if (docentesError) {
+      console.error('Error cargando docentes:', docentesError);
     }
-  };
+
+    console.log('Docentes encontrados:', docentesData);
+
+    // 5. Cargar inscripciones activas
+    const { data: conteos } = await supabase
+      .from('inscripciones')
+      .select('grupo_id')
+      .in('grupo_id', gruposIds)
+      .eq('estado', 'activo');
+
+    // 6. Crear mapas
+    const materiasMap = {};
+    materiasData?.forEach(m => { materiasMap[m.id] = m; });
+
+    const docentesMap = {};
+    docentesData?.forEach(d => { 
+      docentesMap[d.user_id] = d;
+      console.log('Guardando docente:', d.user_id, d.nombre, d.apellido);
+    });
+
+    const conteoMap = {};
+    conteos?.forEach(insc => {
+      conteoMap[insc.grupo_id] = (conteoMap[insc.grupo_id] || 0) + 1;
+    });
+
+    // 7. Combinar todo
+    const gruposCompletos = (gruposData || []).map(grupo => {
+      const docente = docentesMap[grupo.docente_id];
+      console.log(`Buscando docente para grupo ${grupo.id}:`, grupo.docente_id, '→', docente);
+      
+      return {
+        ...grupo,
+        materias: materiasMap[grupo.materia_id] || null,
+        docente: docente || null,
+        inscripciones: [{ count: conteoMap[grupo.id] || 0 }]
+      };
+    });
+
+    console.log('Primer grupo completo:', gruposCompletos[0]);
+
+    setGrupos(gruposCompletos);
+  } catch (error) {
+    console.error('Error cargando grupos:', error);
+    setMessage({ type: 'error', text: 'Error al cargar los grupos' });
+  }
+};
 
   const loadMaterias = async () => {
     try {
@@ -256,15 +331,17 @@ export default function Grupos() {
 
   // Filtrar grupos
   const filteredGrupos = grupos.filter((grupo) => {
-    const matchesSearch = 
-      grupo.materias?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      grupo.materias?.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      grupo.profiles?.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesPeriodo = periodoFilter === 'all' || grupo.periodo === periodoFilter;
-    
-    return matchesSearch && matchesPeriodo;
-  });
+  const nombreDocente = getDocenteFullName(grupo.docente);
+  
+  const matchesSearch = 
+    grupo.materias?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    grupo.materias?.codigo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    nombreDocente.toLowerCase().includes(searchTerm.toLowerCase());
+  
+  const matchesPeriodo = periodoFilter === 'all' || grupo.periodo === periodoFilter;
+  
+  return matchesSearch && matchesPeriodo;
+});
 
   // Paginación
   const totalPages = Math.ceil(filteredGrupos.length / itemsPerPage);
@@ -463,7 +540,7 @@ export default function Grupos() {
                               <div className="flex items-center gap-2">
                                 <UserCheck className="h-4 w-4 text-muted-foreground" />
                                 <span>
-                                  {grupo.docente?.nombre} {grupo.docente?.apellido}
+                                  {getDocenteFullName(grupo.docente)}
                                 </span>
                               </div>
                             </TableCell>

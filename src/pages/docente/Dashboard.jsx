@@ -235,7 +235,7 @@ export default function DocenteDashboard() {
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Button 
-                onClick={() => navigate('/docente/asistencia')} 
+                onClick={() => navigate('/docente/misgrupos')} 
                 className="h-24 flex flex-col gap-2"
                 size="lg"
               >
