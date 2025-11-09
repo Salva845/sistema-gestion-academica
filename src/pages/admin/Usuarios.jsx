@@ -1,6 +1,6 @@
 // =========================================
 // src/pages/admin/Usuarios.jsx
-// CRUD completo de usuarios con filtros y roles
+// CRUD completo de usuarios con DEBUG
 // =========================================
 
 import { useState, useEffect } from 'react';
@@ -60,7 +60,7 @@ import {
   Shield,
 } from 'lucide-react';
 
-// Schema de validación
+// Schema de validación para creación
 const usuarioSchema = z.object({
   email: z.string().email('Email inválido'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
@@ -71,7 +71,15 @@ const usuarioSchema = z.object({
   telefono: z.string().optional(),
 });
 
-const editUsuarioSchema = usuarioSchema.omit({ password: true });
+// Schema para edición (sin password)
+const editUsuarioSchema = z.object({
+  email: z.string().email('Email inválido'),
+  nombre: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
+  apellido: z.string().min(2, 'El apellido debe tener al menos 2 caracteres'),
+  matricula: z.string().min(3, 'La matrícula debe tener al menos 3 caracteres'),
+  role: z.enum(['estudiante', 'docente', 'admin']),
+  telefono: z.string().optional(),
+});
 
 export default function Usuarios() {
   const navigate = useNavigate();
@@ -104,7 +112,24 @@ export default function Usuarios() {
 
   useEffect(() => {
     loadUsuarios();
+    checkCurrentUser(); // ✅ Verificar usuario actual
   }, []);
+
+  const checkCurrentUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    console.log('👤 Usuario actual logueado:', user);
+    
+    if (user) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+      
+      console.log('👤 Perfil del usuario actual:', profile);
+      console.log('🔐 Rol del usuario:', profile?.role);
+    }
+  };
 
   const loadUsuarios = async () => {
     try {
@@ -128,9 +153,23 @@ export default function Usuarios() {
 
   const onSubmit = async (data) => {
     try {
+      console.log('=== INICIO onSubmit ===');
+      console.log('editingUsuario:', editingUsuario);
+      console.log('data recibida:', data);
+      
       if (editingUsuario) {
         // Actualizar usuario
-        const { error: profileError } = await supabase
+        console.log('🔄 MODO: Actualización');
+        console.log('user_id a actualizar:', editingUsuario.user_id);
+        console.log('Datos a enviar:', {
+          nombre: data.nombre,
+          apellido: data.apellido,
+          matricula: data.matricula,
+          role: data.role,
+          telefono: data.telefono,
+        });
+        
+        const { data: updatedData, error: profileError } = await supabase
           .from('profiles')
           .update({
             nombre: data.nombre,
@@ -139,11 +178,27 @@ export default function Usuarios() {
             role: data.role,
             telefono: data.telefono,
           })
-          .eq('user_id', editingUsuario.user_id);
+          .eq('user_id', editingUsuario.user_id)
+          .select();
 
-        if (profileError) throw profileError;
+        console.log('✅ Respuesta de Supabase:');
+        console.log('- updatedData:', updatedData);
+        console.log('- profileError:', profileError);
+
+        if (profileError) {
+          console.error('❌ ERROR en profileError:', profileError);
+          throw new Error(`Error de base de datos: ${profileError.message}`);
+        }
+        
+        if (!updatedData || updatedData.length === 0) {
+          console.warn('⚠️ No se actualizó ningún registro');
+          throw new Error('No se pudo actualizar el usuario. Verifica los permisos de la base de datos.');
+        }
+        
+        console.log('✅ Usuario actualizado correctamente');
         setMessage({ type: 'success', text: 'Usuario actualizado exitosamente' });
       } else {
+        console.log('➕ MODO: Creación');
         // Crear nuevo usuario
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email: data.email,
@@ -158,22 +213,30 @@ export default function Usuarios() {
           },
         });
 
+        console.log('Respuesta signUp:', { authData, authError });
+
         if (authError) throw authError;
 
         if (authData.user) {
-          await supabase
+          const { error: updateError } = await supabase
             .from('profiles')
             .update({ role: data.role, telefono: data.telefono })
             .eq('user_id', authData.user.id);
+            
+          if (updateError) console.error('Error actualizando rol:', updateError);
         }
 
         setMessage({ type: 'success', text: 'Usuario creado exitosamente' });
       }
 
-      loadUsuarios();
+      console.log('🔄 Recargando usuarios...');
+      await loadUsuarios();
+      console.log('✅ Usuarios recargados');
       handleCloseDialog();
+      console.log('=== FIN onSubmit ===');
     } catch (error) {
-      console.error('Error guardando usuario:', error);
+      console.error('❌ ERROR CATCH:', error);
+      console.error('Error completo:', JSON.stringify(error, null, 2));
       setMessage({ 
         type: 'error', 
         text: error.message || 'Error al guardar el usuario' 
@@ -182,38 +245,49 @@ export default function Usuarios() {
   };
 
   const handleEdit = (usuario) => {
+    console.log('📝 handleEdit llamado con usuario:', usuario);
     setEditingUsuario(usuario);
+    setValue('email', usuario.email);
     setValue('nombre', usuario.nombre);
     setValue('apellido', usuario.apellido);
     setValue('matricula', usuario.matricula);
     setValue('role', usuario.role);
     setValue('telefono', usuario.telefono || '');
     setDialogOpen(true);
+    console.log('✅ Formulario poblado y dialog abierto');
   };
 
   const handleDelete = async () => {
     try {
-      // Eliminar usuario de auth.users (cascade eliminará el perfil)
-      const { error } = await supabase.auth.admin.deleteUser(
-        usuarioToDelete.user_id
-      );
+      console.log('🗑️ Intentando eliminar usuario:', usuarioToDelete.user_id);
+      
+      // Primero eliminar el perfil (esto es lo que podemos hacer desde el cliente)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', usuarioToDelete.user_id);
 
-      if (error) throw error;
+      if (profileError) {
+        console.error('Error eliminando perfil:', profileError);
+        throw profileError;
+      }
 
+      console.log('✅ Perfil eliminado correctamente');
       setMessage({ type: 'success', text: 'Usuario eliminado exitosamente' });
-      loadUsuarios();
+      await loadUsuarios();
       setDeleteDialogOpen(false);
       setUsuarioToDelete(null);
     } catch (error) {
-      console.error('Error eliminando usuario:', error);
+      console.error('❌ Error eliminando usuario:', error);
       setMessage({ 
         type: 'error', 
-        text: 'Error al eliminar el usuario. Verifica que no tenga datos asociados.' 
+        text: error.message || 'Error al eliminar el usuario. Verifica que no tenga datos asociados.' 
       });
     }
   };
 
   const handleCloseDialog = () => {
+    console.log('🚪 Cerrando dialog');
     setDialogOpen(false);
     setEditingUsuario(null);
     reset();
@@ -574,34 +648,36 @@ export default function Usuarios() {
           </DialogHeader>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="grid gap-4">
-              {!editingUsuario && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email *</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="usuario@ejemplo.com"
-                      {...register('email')}
-                    />
-                    {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email.message}</p>
-                    )}
-                  </div>
+              {/* Email siempre visible pero readonly en edición */}
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="usuario@ejemplo.com"
+                  {...register('email')}
+                  disabled={!!editingUsuario}
+                  className={editingUsuario ? 'bg-muted' : ''}
+                />
+                {errors.email && (
+                  <p className="text-sm text-destructive">{errors.email.message}</p>
+                )}
+              </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Contraseña *</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      placeholder="Mínimo 6 caracteres"
-                      {...register('password')}
-                    />
-                    {errors.password && (
-                      <p className="text-sm text-destructive">{errors.password.message}</p>
-                    )}
-                  </div>
-                </>
+              {/* Password solo en creación */}
+              {!editingUsuario && (
+                <div className="space-y-2">
+                  <Label htmlFor="password">Contraseña *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Mínimo 6 caracteres"
+                    {...register('password')}
+                  />
+                  {errors.password && (
+                    <p className="text-sm text-destructive">{errors.password.message}</p>
+                  )}
+                </div>
               )}
 
               <div className="grid grid-cols-2 gap-4">
