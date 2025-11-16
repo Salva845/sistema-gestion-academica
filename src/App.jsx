@@ -6,6 +6,7 @@
   import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
   import { useAuth } from './contexts/AuthContext';
   import { ProtectedRoute } from './components/auth/ProtectedRoute';
+  import { AuthProvider } from './contexts/AuthContext';
 
   // Auth pages
   import Login from './pages/auth/Login';
@@ -14,28 +15,29 @@
   import ResetPassword from './pages/auth/ResetPassword';
   import UpdatePassword from './pages/auth/UpdatePassword';
 
-  // Dashboard pages
-  import AdminDashboard from './pages/admin/Dashboard';
-  import DocenteDashboard from './pages/docente/Dashboard';
-  import EstudianteDashboard from './pages/estudiante/Dashboard';
 
   // Paginas Admin
+  import AdminDashboard from './pages/admin/Dashboard';
   import Materias from './pages/admin/Materias';
   import Usuarios from './pages/admin/Usuarios';
   import Grupos from './pages/admin/Grupos';
 
   // Paginas Estudiante
+  import EstudianteDashboard from './pages/estudiante/Dashboard';
   import MisMaterias from './pages/estudiante/MisMaterias';
+  import EstudianteEscanearAsistencia from './pages/estudiante/EscanearAsistencia';
+  import EstudianteMisCalificaciones from './pages/estudiante/MisCalificaciones';
 
   // Paginas Docente
+  import DocenteDashboard from './pages/docente/Dashboard';
   import MisGrupos from './pages/docente/MisGrupos';
   import DocenteAsistencia from './pages/docente/Asistencia';
-  import EstudianteEscanearAsistencia from './pages/estudiante/EscanearAsistencia';
+  import DocenteGrupoDetalle from './pages/docente/GrupoDetalle';
+  import DocenteCalificaciones from './pages/docente/Calificaciones';
+  
 
   function App() {
     const { user, profile, loading } = useAuth();
-
-    // Mostrar loading mientras se carga el perfil
     if (loading) {
       return (
         <div className="min-h-screen flex items-center justify-center">
@@ -49,6 +51,7 @@
 
     return (
       <BrowserRouter>
+      <AuthProvider>
         <Routes>
           {/* Rutas públicas - Reset Password */}
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -109,8 +112,11 @@
           {/* Rutas protegidas - Docente */}
           <Route element={<ProtectedRoute allowedRoles={['docente']} />}>
             <Route path="/docente" element={<DocenteDashboard />} />
+            <Route path="/docente/grupos" element={<MisGrupos />} />
             <Route path="/docente/misgrupos" element={<MisGrupos />} />
+             <Route path="/docente/grupos/:grupoId" element={<DocenteGrupoDetalle />} />
             <Route path="/docente/asistencia/:sesionId" element={<DocenteAsistencia />} />
+            <Route path="/docente/calificaciones" element={<DocenteCalificaciones />} />
             
           </Route>
 
@@ -120,7 +126,7 @@
             <Route path="/estudiante/asistencia" element={<EstudianteEscanearAsistencia />} />
             <Route path="/estudiante/materias" element={<MisMaterias />} />
             <Route path="/estudiante/materias/:id" element={<MisMaterias />} />
-            
+            <Route path="/estudiante/calificaciones" element={<EstudianteMisCalificaciones />} />     
           </Route>
 
           {/* Página de no autorizado */}
@@ -161,6 +167,7 @@
             }
           />
         </Routes>
+        </AuthProvider>
       </BrowserRouter>
     );
   }

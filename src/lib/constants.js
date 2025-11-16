@@ -1,3 +1,7 @@
+// =========================================
+// src/lib/constants.js
+// =========================================
+
 export const ROLES = {
   ADMIN: 'admin',
   DOCENTE: 'docente',
@@ -24,9 +28,23 @@ export const TIPOS_CALIFICACION = {
   EXPOSICION: 'exposicion',
 };
 
+export const TIPOS_CALIFICACION_LABELS = {
+  examen: 'Examen',
+  tarea: 'Tarea',
+  proyecto: 'Proyecto',
+  participacion: 'Participación',
+  exposicion: 'Exposición',
+};
+
+export const CALIFICACION_CONFIG = {
+  VALOR_MAXIMO_DEFAULT: 10,
+  PESO_DEFAULT: 10,
+  APROBATORIO: 6,
+};
+
 export const QR_CONFIG = {
   EXPIRACION_MINUTOS: 10,
-  REFRESH_INTERVAL: 60000, // 1 minuto
+  REFRESH_INTERVAL: 60000, 
 };
 
 export const PAGINATION = {
@@ -70,6 +88,6 @@ export const ROUTES = {
     DASHBOARD: '/estudiante',
     MATERIAS: '/estudiante/materias',
     ASISTENCIA: '/estudiante/asistencia',
-    CALIFICACIONES: '/estudiante/calificaciones',
+    CALIFICACIONES: '/estudiante/calificaciones', 
   },
 };
