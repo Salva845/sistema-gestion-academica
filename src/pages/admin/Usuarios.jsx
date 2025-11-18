@@ -134,18 +134,74 @@ export default function Usuarios() {
   const loadUsuarios = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Cargando usuarios...');
       
-      const { data, error } = await supabase
+      // Cargar perfiles
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
         .order('nombre', { ascending: true });
 
-      if (error) throw error;
+      if (profilesError) {
+        console.error('❌ Error en query de profiles:', profilesError);
+        throw profilesError;
+      }
       
-      setUsuarios(data || []);
+      console.log('✅ Perfiles cargados:', profilesData?.length || 0);
+      
+      // Obtener emails desde auth.users para usuarios que no tienen email en profiles
+      const userIds = profilesData?.map(p => p.user_id) || [];
+      const usuariosCompletos = [];
+      
+      for (const profile of profilesData || []) {
+        let email = profile.email;
+        
+        // Si no tiene email en el perfil, intentar obtenerlo de auth.users
+        if (!email && profile.user_id) {
+          try {
+            // Nota: No podemos consultar auth.users directamente desde el cliente
+            // El email debería estar en el perfil o venir del metadata
+            // Por ahora, usaremos el email del perfil o null
+            console.warn(`⚠️ Usuario ${profile.user_id} (${profile.nombre}) no tiene email en perfil`);
+          } catch (e) {
+            console.error('Error obteniendo email:', e);
+          }
+        }
+        
+        usuariosCompletos.push({
+          ...profile,
+          email: email || null // Asegurar que email sea null si no existe
+        });
+      }
+      
+      console.log('📋 Usuarios completos:', usuariosCompletos);
+      
+      // Debug: Verificar roles y emails de cada usuario
+      usuariosCompletos.forEach((usuario, index) => {
+        console.log(`Usuario ${index}:`, {
+          nombre: usuario.nombre,
+          apellido: usuario.apellido,
+          role: usuario.role,
+          role_normalized: usuario.role?.toLowerCase().trim(),
+          email: usuario.email,
+          matricula: usuario.matricula,
+          user_id: usuario.user_id
+        });
+      });
+      
+      // Contar por roles
+      const conteoRoles = usuariosCompletos.reduce((acc, u) => {
+        const role = u.role?.toLowerCase().trim() || 'sin-rol';
+        acc[role] = (acc[role] || 0) + 1;
+        return acc;
+      }, {});
+      console.log('📊 Conteo por roles:', conteoRoles);
+      
+      setUsuarios(usuariosCompletos);
     } catch (error) {
-      console.error('Error cargando usuarios:', error);
-      setMessage({ type: 'error', text: 'Error al cargar los usuarios' });
+      console.error('❌ Error cargando usuarios:', error);
+      setMessage({ type: 'error', text: `Error al cargar los usuarios: ${error.message}` });
+      setUsuarios([]); // Asegurar que el array esté vacío en caso de error
     } finally {
       setLoading(false);
     }
@@ -218,12 +274,39 @@ export default function Usuarios() {
         if (authError) throw authError;
 
         if (authData.user) {
+          // Actualizar el perfil con todos los datos necesarios
           const { error: updateError } = await supabase
             .from('profiles')
-            .update({ role: data.role, telefono: data.telefono })
+            .update({ 
+              role: data.role, 
+              telefono: data.telefono,
+              email: data.email,
+              nombre: data.nombre,
+              apellido: data.apellido,
+              matricula: data.matricula
+            })
             .eq('user_id', authData.user.id);
             
-          if (updateError) console.error('Error actualizando rol:', updateError);
+          if (updateError) {
+            console.error('❌ Error actualizando perfil:', updateError);
+            // Si el perfil no existe, crearlo
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .insert({
+                user_id: authData.user.id,
+                email: data.email,
+                nombre: data.nombre,
+                apellido: data.apellido,
+                matricula: data.matricula,
+                role: data.role,
+                telefono: data.telefono || null
+              });
+            
+            if (insertError) {
+              console.error('❌ Error creando perfil:', insertError);
+              throw new Error(`Error creando perfil: ${insertError.message}`);
+            }
+          }
         }
 
         setMessage({ type: 'success', text: 'Usuario creado exitosamente' });
@@ -293,15 +376,16 @@ export default function Usuarios() {
     reset();
   };
 
-  // Filtrar usuarios
+  // Filtrar usuarios (comparación case-insensitive para roles)
   const filteredUsuarios = usuarios.filter((usuario) => {
     const matchesSearch = 
-      usuario.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      usuario.apellido.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      usuario.matricula.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      usuario.email.toLowerCase().includes(searchTerm.toLowerCase());
+      (usuario.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (usuario.apellido || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (usuario.matricula || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (usuario.email || '').toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesRole = roleFilter === 'all' || usuario.role === roleFilter;
+    const matchesRole = roleFilter === 'all' || 
+      (usuario.role && usuario.role.toLowerCase().trim() === roleFilter.toLowerCase().trim());
     
     return matchesSearch && matchesRole;
   });
@@ -312,11 +396,11 @@ export default function Usuarios() {
   const endIndex = startIndex + itemsPerPage;
   const currentUsuarios = filteredUsuarios.slice(startIndex, endIndex);
 
-  // Estadísticas por rol
+  // Estadísticas por rol (usar toLowerCase para comparación case-insensitive)
   const stats = {
-    estudiantes: usuarios.filter(u => u.role === 'estudiante').length,
-    docentes: usuarios.filter(u => u.role === 'docente').length,
-    admins: usuarios.filter(u => u.role === 'admin').length,
+    estudiantes: usuarios.filter(u => u.role && u.role.toLowerCase().trim() === 'estudiante').length,
+    docentes: usuarios.filter(u => u.role && u.role.toLowerCase().trim() === 'docente').length,
+    admins: usuarios.filter(u => u.role && u.role.toLowerCase().trim() === 'admin').length,
   };
 
   const getRoleBadge = (role) => {
@@ -536,7 +620,11 @@ export default function Usuarios() {
                                 <span className="font-mono text-sm">{usuario.matricula}</span>
                               </TableCell>
                               <TableCell className="text-sm">
-                                {usuario.email}
+                                {usuario.email || (
+                                  <span className="text-muted-foreground italic">
+                                    Sin email
+                                  </span>
+                                )}
                               </TableCell>
                               <TableCell>
                                 <Badge variant={roleBadge.variant} className="gap-1">

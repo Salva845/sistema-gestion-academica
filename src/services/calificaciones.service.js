@@ -1,80 +1,245 @@
 // =========================================
 // src/services/calificaciones.service.js
-// Servicio para gestión de calificaciones
+// Servicio para manejo de calificaciones
 // =========================================
+
 import { supabase } from '../lib/supabase';
+
+// Set para rastrear funciones RPC no disponibles
+const funcionesNoDisponibles = new Set();
+
+// Verificar que el cliente de Supabase esté inicializado
+const verificarClienteSupabase = () => {
+  if (!supabase) {
+    throw new Error('Cliente de Supabase no inicializado');
+  }
+};
 
 export const calificacionesService = {
   /**
-   * Obtener calificaciones de un estudiante por grupo
+   * Obtener calificaciones de un estudiante por grupo con promedio calculado en PostgreSQL
    */
   async obtenerCalificacionesPorGrupo(inscripcionId) {
     try {
-      const { data, error } = await supabase
+      verificarClienteSupabase();
+      
+      // Si ya sabemos que la función no existe, saltar directamente al fallback
+      if (!funcionesNoDisponibles.has('obtener_calificaciones_con_promedio')) {
+        try {
+          const { data, error } = await supabase.rpc('obtener_calificaciones_con_promedio', {
+            p_inscripcion_id: inscripcionId
+          });
+
+          // Si la función existe y retorna datos, usarla
+          if (!error && data && data.length > 0) {
+            const result = data[0];
+            return { 
+              data: result.calificaciones || [], 
+              promedio: parseFloat(result.promedio || 0),
+              error: null 
+            };
+          }
+
+          // Si hay error porque la función no existe o falta API key, marcarla y usar fallback
+          if (error && (
+            error.code === 'PGRST202' || 
+            error.code === 'PGRST301' ||
+            error.status === 404 ||
+            error.message?.includes('Could not find') ||
+            error.message?.includes('No API key found') ||
+            error.message?.includes('apikey') ||
+            error.message?.includes('404')
+          )) {
+            console.warn('Función obtener_calificaciones_con_promedio no disponible, usando fallback');
+            funcionesNoDisponibles.add('obtener_calificaciones_con_promedio');
+          } else if (error) {
+            // Si es otro tipo de error, también usar fallback pero loguearlo
+            console.warn('Error en obtener_calificaciones_con_promedio:', error);
+            funcionesNoDisponibles.add('obtener_calificaciones_con_promedio');
+          }
+        } catch (rpcError) {
+          // Si falla la llamada (404, API key, etc.), marcar como no disponible
+          if (rpcError.message?.includes('API key') || rpcError.message?.includes('apikey')) {
+            console.error('Error de configuración de Supabase:', rpcError.message);
+            // No marcar como no disponible si es un error de configuración
+            throw rpcError;
+          }
+          // Manejar errores 404 y otros errores de red
+          if (rpcError.status === 404 || rpcError.message?.includes('404') || rpcError.code === 'PGRST301') {
+            console.warn('Función obtener_calificaciones_con_promedio no encontrada (404), usando fallback');
+            funcionesNoDisponibles.add('obtener_calificaciones_con_promedio');
+          } else {
+            console.warn('Error en RPC obtener_calificaciones_con_promedio:', rpcError);
+            funcionesNoDisponibles.add('obtener_calificaciones_con_promedio');
+          }
+        }
+      }
+      
+      // Fallback: Obtener calificaciones directamente
+      const { data: calificaciones, error: calError } = await supabase
         .from('calificaciones')
         .select('*')
         .eq('inscripcion_id', inscripcionId)
         .order('fecha', { ascending: false });
 
-      if (error) throw error;
-      return { data, error: null };
+      if (calError) {
+        return { data: [], promedio: 0, error: calError };
+      }
+
+      // Calcular promedio ponderado en el frontend
+      const promedio = this.calcularPromedioPonderado(calificaciones || []);
+
+      return { 
+        data: calificaciones || [], 
+        promedio,
+        error: null 
+      };
     } catch (error) {
-      console.error('Error obteniendo calificaciones:', error);
-      return { data: null, error };
+      console.error('Error obteniendo calificaciones por grupo:', error);
+      return { data: [], promedio: 0, error };
     }
   },
 
   /**
-   * Obtener todas las calificaciones de un estudiante
+   * Calcular promedio ponderado en el frontend (fallback)
    */
-  async obtenerCalificacionesEstudiante(estudianteId) {
+  calcularPromedioPonderado(calificaciones) {
+    if (!calificaciones || calificaciones.length === 0) {
+      return 0;
+    }
+
+    let sumaPonderada = 0;
+    let totalPeso = 0;
+
+    calificaciones.forEach(cal => {
+      const valorNormalizado = (Number(cal.valor) / Number(cal.valor_maximo)) * 10;
+      const peso = Number(cal.peso) || 0;
+      sumaPonderada += valorNormalizado * peso;
+      totalPeso += peso;
+    });
+
+    if (totalPeso === 0) {
+      return 0;
+    }
+
+    return parseFloat((sumaPonderada / totalPeso).toFixed(2));
+  },
+
+  /**
+   * Obtener evolución de calificaciones
+   */
+  async obtenerEvolucionCalificaciones(inscripcionId, agruparPor = 'semana') {
     try {
-      // Primero obtener las inscripciones del estudiante
-      const { data: inscripciones, error: inscError } = await supabase
-        .from('inscripciones')
-        .select(`
-          id,
-          estudiante_id,
-          grupos (
-            id,
-            periodo,
-            materias (nombre, codigo)
-          )
-        `)
-        .eq('estudiante_id', estudianteId)
-        .eq('estado', 'activo');
+      verificarClienteSupabase();
 
-      if (inscError) throw inscError;
+      if (!funcionesNoDisponibles.has('obtener_evolucion_calificaciones')) {
+        try {
+          // Pasar parámetros explícitamente (Supabase RPC requiere todos los parámetros)
+          const params = {
+            p_inscripcion_id: inscripcionId,
+            p_agrupar_por: agruparPor || 'semana' // Siempre pasar el parámetro
+          };
 
-      const inscripcionesIds = inscripciones?.map(i => i.id) || [];
-      
-      if (inscripcionesIds.length === 0) {
-        return { data: [], error: null };
+          const { data, error } = await supabase.rpc('obtener_evolucion_calificaciones', params);
+
+          if (!error && data) {
+            return { data: data || [], error: null };
+          }
+
+          // Manejar errores 400, 404 y otros
+          if (error) {
+            console.warn('Error en obtener_evolucion_calificaciones:', error);
+            if (
+              error.code === 'PGRST202' ||
+              error.code === 'PGRST301' ||
+              error.status === 404 ||
+              error.status === 400 ||
+              error.message?.includes('Could not find') ||
+              error.message?.includes('Bad Request')
+            ) {
+              funcionesNoDisponibles.add('obtener_evolucion_calificaciones');
+            }
+          }
+        } catch (rpcError) {
+          console.warn('Error en RPC obtener_evolucion_calificaciones:', rpcError);
+          if (
+            rpcError.status === 404 || 
+            rpcError.status === 400 ||
+            rpcError.message?.includes('404') ||
+            rpcError.message?.includes('400')
+          ) {
+            funcionesNoDisponibles.add('obtener_evolucion_calificaciones');
+          }
+        }
       }
 
-      // Luego obtener las calificaciones de esas inscripciones
+      // Fallback: calcular evolución en el frontend
       const { data: calificaciones, error: calError } = await supabase
         .from('calificaciones')
         .select('*')
-        .in('inscripcion_id', inscripcionesIds)
-        .order('fecha', { ascending: false });
+        .eq('inscripcion_id', inscripcionId)
+        .order('fecha', { ascending: true });
 
-      if (calError) throw calError;
+      if (calError) {
+        return { data: [], error: calError };
+      }
 
-      // Enriquecer calificaciones con info de inscripción
-      const calificacionesEnriquecidas = calificaciones?.map(cal => {
-        const inscripcion = inscripciones.find(i => i.id === cal.inscripcion_id);
-        return {
-          ...cal,
-          inscripciones: inscripcion
-        };
+      // Calcular evolución acumulada
+      const evolucion = [];
+      let sumaPonderada = 0;
+      let totalPeso = 0;
+
+      (calificaciones || []).forEach(cal => {
+        const valorNormalizado = (Number(cal.valor) / Number(cal.valor_maximo)) * 10;
+        const peso = Number(cal.peso) || 0;
+        sumaPonderada += valorNormalizado * peso;
+        totalPeso += peso;
+
+        const promedioAcumulado = totalPeso > 0 ? sumaPonderada / totalPeso : 0;
+
+        evolucion.push({
+          periodo: cal.fecha,
+          promedio_acumulado: parseFloat(promedioAcumulado.toFixed(2)),
+          cantidad_evaluaciones: evolucion.length + 1
+        });
       });
 
-      return { data: calificacionesEnriquecidas || [], error: null };
+      return { data: evolucion, error: null };
     } catch (error) {
-      console.error('Error obteniendo calificaciones estudiante:', error);
-      return { data: null, error };
+      console.error('Error obteniendo evolución de calificaciones:', error);
+      return { data: [], error };
     }
+  },
+
+  /**
+   * Obtener resumen por tipo de evaluación (función síncrona)
+   */
+  obtenerResumenPorTipo(calificaciones) {
+    if (!calificaciones || calificaciones.length === 0) {
+      return [];
+    }
+
+    const tipos = ['examen', 'tarea', 'proyecto', 'participacion', 'exposicion'];
+    const resumen = tipos.map(tipo => {
+      const calsTipo = calificaciones.filter(c => c.tipo === tipo);
+      
+      if (calsTipo.length === 0) {
+        return null;
+      }
+
+      const suma = calsTipo.reduce((sum, c) => {
+        const valorNormalizado = (Number(c.valor) / Number(c.valor_maximo)) * 10;
+        return sum + valorNormalizado;
+      }, 0);
+
+      return {
+        tipo,
+        cantidad: calsTipo.length,
+        promedio: parseFloat((suma / calsTipo.length).toFixed(2))
+      };
+    }).filter(item => item !== null);
+
+    return resumen;
   },
 
   /**
@@ -82,13 +247,18 @@ export const calificacionesService = {
    */
   async crearCalificacion(calificacionData) {
     try {
+      verificarClienteSupabase();
+
       const { data, error } = await supabase
         .from('calificaciones')
         .insert([calificacionData])
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        return { data: null, error };
+      }
+
       return { data, error: null };
     } catch (error) {
       console.error('Error creando calificación:', error);
@@ -97,18 +267,23 @@ export const calificacionesService = {
   },
 
   /**
-   * Actualizar una calificación
+   * Actualizar una calificación existente
    */
-  async actualizarCalificacion(id, updates) {
+  async actualizarCalificacion(calificacionId, calificacionData) {
     try {
+      verificarClienteSupabase();
+
       const { data, error } = await supabase
         .from('calificaciones')
-        .update(updates)
-        .eq('id', id)
+        .update(calificacionData)
+        .eq('id', calificacionId)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        return { data: null, error };
+      }
+
       return { data, error: null };
     } catch (error) {
       console.error('Error actualizando calificación:', error);
@@ -119,114 +294,23 @@ export const calificacionesService = {
   /**
    * Eliminar una calificación
    */
-  async eliminarCalificacion(id) {
+  async eliminarCalificacion(calificacionId) {
     try {
+      verificarClienteSupabase();
+
       const { error } = await supabase
         .from('calificaciones')
         .delete()
-        .eq('id', id);
+        .eq('id', calificacionId);
 
-      if (error) throw error;
-      return { data: true, error: null };
-    } catch (error) {
-      console.error('Error eliminando calificación:', error);
-      return { data: null, error };
-    }
-  },
-
-  /**
-   * Calcular promedio ponderado de una inscripción
-   */
-  calcularPromedioPonderado(calificaciones) {
-    if (!calificaciones || calificaciones.length === 0) return 0;
-
-    const totalPeso = calificaciones.reduce((sum, cal) => sum + Number(cal.peso), 0);
-    if (totalPeso === 0) return 0;
-
-    const sumaPonderada = calificaciones.reduce((sum, cal) => {
-      const valorNormalizado = (Number(cal.valor) / Number(cal.valor_maximo)) * 10;
-      return sum + (valorNormalizado * Number(cal.peso));
-    }, 0);
-
-    return (sumaPonderada / totalPeso).toFixed(2);
-  },
-
-  /**
-   * Obtener estadísticas de calificaciones por grupo
-   */
-  async obtenerEstadisticasGrupo(grupoId) {
-    try {
-      // Obtener todas las inscripciones del grupo
-      const { data: inscripciones, error: inscError } = await supabase
-        .from('inscripciones')
-        .select('id, estudiante_id')
-        .eq('grupo_id', grupoId)
-        .eq('estado', 'activo');
-
-      if (inscError) throw inscError;
-
-      // Obtener perfiles de estudiantes
-      const estudiantesIds = inscripciones?.map(i => i.estudiante_id) || [];
-      
-      if (estudiantesIds.length === 0) {
-        return { data: [], error: null };
+      if (error) {
+        return { error };
       }
 
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('user_id, nombre, apellido, matricula')
-        .in('user_id', estudiantesIds);
-
-      if (profilesError) throw profilesError;
-
-      // Para cada inscripción, obtener sus calificaciones
-      const estudiantesConCalificaciones = await Promise.all(
-        (inscripciones || []).map(async (insc) => {
-          const profile = profiles?.find(p => p.user_id === insc.estudiante_id);
-          
-          const { data: calificaciones } = await supabase
-            .from('calificaciones')
-            .select('*')
-            .eq('inscripcion_id', insc.id);
-
-          const promedio = this.calcularPromedioPonderado(calificaciones || []);
-
-          return {
-            inscripcion_id: insc.id,
-            estudiante_id: insc.estudiante_id,
-            estudiante: profile,
-            calificaciones: calificaciones || [],
-            promedio: parseFloat(promedio)
-          };
-        })
-      );
-
-      return { data: estudiantesConCalificaciones, error: null };
+      return { error: null };
     } catch (error) {
-      console.error('Error obteniendo estadísticas grupo:', error);
-      return { data: null, error };
+      console.error('Error eliminando calificación:', error);
+      return { error };
     }
-  },  
-
-  /**
-   * Obtener resumen de calificaciones por tipo
-   */
-  obtenerResumenPorTipo(calificaciones) {
-    const tipos = ['examen', 'tarea', 'proyecto', 'participacion', 'exposicion'];
-    
-    return tipos.map(tipo => {
-      const calsTipo = calificaciones.filter(c => c.tipo === tipo);
-      if (calsTipo.length === 0) return null;
-
-      const promedio = calsTipo.reduce((sum, c) => {
-        return sum + (Number(c.valor) / Number(c.valor_maximo)) * 10;
-      }, 0) / calsTipo.length;
-
-      return {
-        tipo,
-        cantidad: calsTipo.length,
-        promedio: promedio.toFixed(2)
-      };
-    }).filter(Boolean);
   }
 };

@@ -1,13 +1,13 @@
 // =========================================
 // src/pages/admin/Dashboard.jsx
-// Dashboard completo para administradores
+// Dashboard completo para administradores - Módulo 5
 // =========================================
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
-import { User } from 'lucide-react';
+import { dashboardService } from '../../services/dashboard.service';
+import { User, Filter, X } from 'lucide-react';
 
 import { 
   Card, 
@@ -18,6 +18,13 @@ import {
 } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
 import {
   Users,
   BookOpen,
@@ -39,6 +46,8 @@ import {
   PieChart, 
   Pie, 
   Cell,
+  AreaChart,
+  Area,
   XAxis, 
   YAxis, 
   CartesianGrid, 
@@ -51,6 +60,22 @@ export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  
+  // Filtros
+  const [filtros, setFiltros] = useState({
+    periodo: 'all',
+    materiaId: 'all',
+    grupoId: 'all'
+  });
+  
+  // Filtros disponibles
+  const [filtrosDisponibles, setFiltrosDisponibles] = useState({
+    periodos: [],
+    materias: [],
+    grupos: []
+  });
+
+  // Métricas globales
   const [stats, setStats] = useState({
     totalEstudiantes: 0,
     totalDocentes: 0,
@@ -60,80 +85,83 @@ export default function AdminDashboard() {
     asistenciaPromedio: 0,
   });
 
+  // Datos para gráficas
   const [chartData, setChartData] = useState({
     materiasPopulares: [],
-    distribucionCalificaciones: [],
+    distribucionCalificaciones: [], // Histograma
+    distribucionCalificacionesPie: [], // Pie chart
+    asistenciaPorGrupo: [],
     tendenciaAsistencia: [],
+    tendenciaCalificaciones: [],
   });
 
   useEffect(() => {
-    loadDashboardData();
+    loadFiltrosDisponibles();
   }, []);
+
+  useEffect(() => {
+    if (filtrosDisponibles.periodos.length > 0) {
+      loadDashboardData();
+    }
+  }, [filtros, filtrosDisponibles]);
+
+  const loadFiltrosDisponibles = async () => {
+    try {
+      const { data } = await dashboardService.obtenerFiltrosDisponibles();
+      if (data) {
+        setFiltrosDisponibles(data);
+      }
+    } catch (error) {
+      console.error('Error cargando filtros:', error);
+    }
+  };
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
 
-      // Contar estudiantes
-      const { count: estudiantesCount } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'estudiante');
+      // Preparar filtros para las funciones
+      const filtrosParams = {
+        periodo: filtros.periodo !== 'all' ? filtros.periodo : null,
+        materiaId: filtros.materiaId !== 'all' ? filtros.materiaId : null,
+        grupoId: filtros.grupoId !== 'all' ? filtros.grupoId : null
+      };
 
-      // Contar docentes
-      const { count: docentesCount } = await supabase
-        .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'docente');
+      // Cargar métricas globales
+      const { data: metricas } = await dashboardService.obtenerMetricasGlobales(filtrosParams);
+      if (metricas) {
+        setStats({
+          totalEstudiantes: metricas.totalEstudiantes,
+          totalDocentes: metricas.totalDocentes,
+          totalMaterias: filtrosDisponibles.materias.length,
+          totalGrupos: metricas.totalGrupos,
+          promedioGeneral: metricas.promedioGeneral,
+          asistenciaPromedio: metricas.asistenciaPromedio,
+        });
+      }
 
-      // Contar materias
-      const { count: materiasCount } = await supabase
-        .from('materias')
-        .select('*', { count: 'exact', head: true });
+      // Cargar todas las gráficas en paralelo
+      const [
+        materiasPopulares,
+        distribucionCalificaciones,
+        asistenciaPorGrupo,
+        tendenciaAsistencia,
+        tendenciaCalificaciones
+      ] = await Promise.all([
+        dashboardService.obtenerMateriasPopulares({ periodo: filtrosParams.periodo }),
+        dashboardService.obtenerDistribucionCalificaciones(filtrosParams),
+        dashboardService.obtenerAsistenciaPorGrupo({ periodo: filtrosParams.periodo, materiaId: filtrosParams.materiaId }),
+        dashboardService.obtenerTendenciasAsistencia({ ...filtrosParams, agruparPor: 'mes' }),
+        dashboardService.obtenerTendenciasCalificaciones({ ...filtrosParams, agruparPor: 'mes' })
+      ]);
 
-      // Contar grupos activos
-      const { count: gruposCount } = await supabase
-        .from('grupos')
-        .select('*', { count: 'exact', head: true })
-        .eq('activo', true);
-
-      // Calcular promedio general (simulado por ahora)
-      const promedioGeneral = 8.5;
-      const asistenciaPromedio = 87;
-
-      setStats({
-        totalEstudiantes: estudiantesCount || 0,
-        totalDocentes: docentesCount || 0,
-        totalMaterias: materiasCount || 0,
-        totalGrupos: gruposCount || 0,
-        promedioGeneral,
-        asistenciaPromedio,
-      });
-
-      // Datos para gráficas (simulados - después conectar con datos reales)
       setChartData({
-        materiasPopulares: [
-          { name: 'Programación I', estudiantes: 45 },
-          { name: 'Cálculo', estudiantes: 38 },
-          { name: 'Bases de Datos', estudiantes: 42 },
-          { name: 'Redes', estudiantes: 35 },
-          { name: 'Desarrollo Web', estudiantes: 48 },
-        ],
-        distribucionCalificaciones: [
-          { name: '10', value: 15 },
-          { name: '9-9.9', value: 25 },
-          { name: '8-8.9', value: 30 },
-          { name: '7-7.9', value: 20 },
-          { name: '6-6.9', value: 10 },
-        ],
-        tendenciaAsistencia: [
-          { mes: 'Ene', porcentaje: 85 },
-          { mes: 'Feb', porcentaje: 87 },
-          { mes: 'Mar', porcentaje: 89 },
-          { mes: 'Abr', porcentaje: 86 },
-          { mes: 'May', porcentaje: 88 },
-          { mes: 'Jun', porcentaje: 90 },
-        ],
+        materiasPopulares: materiasPopulares.data || [],
+        distribucionCalificaciones: distribucionCalificaciones.data || [],
+        distribucionCalificacionesPie: distribucionCalificaciones.data || [],
+        asistenciaPorGrupo: asistenciaPorGrupo.data || [],
+        tendenciaAsistencia: tendenciaAsistencia.data || [],
+        tendenciaCalificaciones: tendenciaCalificaciones.data || [],
       });
 
     } catch (error) {
@@ -143,7 +171,26 @@ export default function AdminDashboard() {
     }
   };
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+  const handleFiltroChange = (tipo, value) => {
+    setFiltros(prev => {
+      const nuevos = { ...prev, [tipo]: value };
+      // Si cambia periodo o materia, resetear grupo
+      if (tipo === 'periodo' || tipo === 'materiaId') {
+        nuevos.grupoId = 'all';
+      }
+      return nuevos;
+    });
+  };
+
+  const limpiarFiltros = () => {
+    setFiltros({
+      periodo: 'all',
+      materiaId: 'all',
+      grupoId: 'all'
+    });
+  };
+
+  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
 
   const StatCard = ({ title, value, icon: Icon, trend, color = 'blue' }) => (
     <Card>
@@ -166,6 +213,8 @@ export default function AdminDashboard() {
       </CardContent>
     </Card>
   );
+
+  const tieneFiltrosActivos = filtros.periodo !== 'all' || filtros.materiaId !== 'all' || filtros.grupoId !== 'all';
 
   if (loading) {
     return (
@@ -223,13 +272,90 @@ export default function AdminDashboard() {
           </p>
         </div>
 
+        {/* Filtros */}
+        <Card className="mb-8">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Filter className="h-5 w-5" />
+                  Filtros
+                </CardTitle>
+                <CardDescription>Filtra los datos por periodo, materia o grupo</CardDescription>
+              </div>
+              {tieneFiltrosActivos && (
+                <Button variant="outline" size="sm" onClick={limpiarFiltros} className="gap-2">
+                  <X className="h-4 w-4" />
+                  Limpiar Filtros
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Periodo</label>
+                <Select value={filtros.periodo} onValueChange={(value) => handleFiltroChange('periodo', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los periodos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los periodos</SelectItem>
+                    {filtrosDisponibles.periodos.map(periodo => (
+                      <SelectItem key={periodo} value={periodo}>{periodo}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Materia</label>
+                <Select value={filtros.materiaId} onValueChange={(value) => handleFiltroChange('materiaId', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas las materias" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las materias</SelectItem>
+                    {filtrosDisponibles.materias.map(materia => (
+                      <SelectItem key={materia.id} value={materia.id}>
+                        {materia.nombre} ({materia.codigo})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Grupo</label>
+                <Select value={filtros.grupoId} onValueChange={(value) => handleFiltroChange('grupoId', value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos los grupos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los grupos</SelectItem>
+                    {filtrosDisponibles.grupos
+                      .filter(g => 
+                        (filtros.periodo === 'all' || g.periodo === filtros.periodo) &&
+                        (filtros.materiaId === 'all' || g.materia === filtrosDisponibles.materias.find(m => m.id === filtros.materiaId)?.nombre)
+                      )
+                      .map(grupo => (
+                        <SelectItem key={grupo.id} value={grupo.id}>
+                          {grupo.nombre}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Stats Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
           <StatCard
             title="Total Estudiantes"
             value={stats.totalEstudiantes}
             icon={Users}
-            trend="+5% vs mes anterior"
             color="blue"
           />
           <StatCard
@@ -252,16 +378,14 @@ export default function AdminDashboard() {
           />
           <StatCard
             title="Promedio General"
-            value={stats.promedioGeneral.toFixed(1)}
+            value={stats.promedioGeneral > 0 ? stats.promedioGeneral.toFixed(1) : '--'}
             icon={Award}
-            trend="+0.3 vs mes anterior"
             color="yellow"
           />
           <StatCard
             title="Asistencia Promedio"
-            value={`${stats.asistenciaPromedio}%`}
+            value={stats.asistenciaPromedio > 0 ? `${stats.asistenciaPromedio.toFixed(1)}%` : '--'}
             icon={Clock}
-            trend="+2% vs mes anterior"
             color="green"
           />
         </div>
@@ -319,73 +443,181 @@ export default function AdminDashboard() {
               <CardDescription>Top 5 materias más demandadas</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData.materiasPopulares}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="estudiantes" fill="#3b82f6" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {chartData.materiasPopulares.length === 0 ? (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  No hay datos disponibles
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={chartData.materiasPopulares}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="estudiantes" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
 
-          {/* Distribución de Calificaciones */}
+          {/* Distribución de Calificaciones - Pie Chart */}
           <Card>
             <CardHeader>
               <CardTitle>Distribución de Calificaciones</CardTitle>
-              <CardDescription>Rangos de calificaciones del semestre</CardDescription>
+              <CardDescription>Rangos de calificaciones</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={chartData.distribucionCalificaciones}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {chartData.distribucionCalificaciones.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              {chartData.distribucionCalificacionesPie.length === 0 ? (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  No hay datos disponibles
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={chartData.distribucionCalificacionesPie}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {chartData.distribucionCalificacionesPie.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Tendencia de Asistencia */}
-        <Card>
+        {/* Histograma de Distribución de Calificaciones */}
+        <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Tendencia de Asistencia</CardTitle>
-            <CardDescription>Porcentaje mensual de asistencia general</CardDescription>
+            <CardTitle>Histograma de Distribución de Calificaciones</CardTitle>
+            <CardDescription>Distribución por rangos de calificaciones</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={chartData.tendenciaAsistencia}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="porcentaje" 
-                  stroke="#10b981" 
-                  strokeWidth={2}
-                  name="Asistencia (%)"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {chartData.distribucionCalificaciones.length === 0 ? (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                No hay datos disponibles
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData.distribucionCalificaciones}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="value" fill="#3b82f6" radius={[8, 8, 0, 0]} name="Cantidad de Estudiantes" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
+
+        {/* Asistencia por Grupo */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Asistencia por Grupo</CardTitle>
+            <CardDescription>Porcentaje de asistencia promedio por grupo</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {chartData.asistenciaPorGrupo.length === 0 ? (
+              <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                No hay datos disponibles
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={chartData.asistenciaPorGrupo}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="grupo" angle={-45} textAnchor="end" height={100} />
+                  <YAxis domain={[0, 100]} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="asistencia" fill="#10b981" radius={[8, 8, 0, 0]} name="Asistencia (%)" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Tendencias Temporales */}
+        <div className="grid gap-6 md:grid-cols-2 mb-8">
+          {/* Tendencia de Asistencia */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tendencia de Asistencia</CardTitle>
+              <CardDescription>Evolución mensual de asistencia</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {chartData.tendenciaAsistencia.length === 0 ? (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  No hay datos disponibles
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={chartData.tendenciaAsistencia}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="periodo" />
+                    <YAxis domain={[0, 100]} />
+                    <Tooltip />
+                    <Legend />
+                    <Area 
+                      type="monotone" 
+                      dataKey="porcentaje" 
+                      stroke="#10b981" 
+                      fill="#10b981"
+                      fillOpacity={0.6}
+                      name="Asistencia (%)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Tendencia de Calificaciones */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Tendencia de Calificaciones</CardTitle>
+              <CardDescription>Evolución mensual de promedios</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {chartData.tendenciaCalificaciones.length === 0 ? (
+                <div className="flex items-center justify-center h-[300px] text-muted-foreground">
+                  No hay datos disponibles
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={chartData.tendenciaCalificaciones}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="periodo" />
+                    <YAxis domain={[0, 10]} />
+                    <Tooltip />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="promedio" 
+                      stroke="#3b82f6" 
+                      strokeWidth={3}
+                      name="Promedio"
+                      dot={{ r: 5 }}
+                      activeDot={{ r: 8 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   );

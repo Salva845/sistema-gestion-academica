@@ -23,20 +23,10 @@ export function generateSessionToken() {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 }
 
-// Calcular promedio ponderado
-export function calcularPromedioPonderado(calificaciones) {
-  if (!calificaciones || calificaciones.length === 0) return 0;
-  
-  const totalPesos = calificaciones.reduce((sum, cal) => sum + cal.peso, 0);
-  if (totalPesos === 0) return 0;
-  
-  const sumaCalificaciones = calificaciones.reduce(
-    (sum, cal) => sum + (cal.valor * cal.peso / cal.valor_maximo),
-    0
-  );
-  
-  return (sumaCalificaciones / totalPesos) * 10;
-}
+// NOTA: calcularPromedioPonderado fue movido a calificaciones.service.js
+// Este archivo ya no contiene esta función para evitar duplicación
+// Usar calificacionesService.calcularPromedioPonderado() o mejor aún,
+// calificacionesService.obtenerPromedioPonderado() que usa PostgreSQL
 
 // Calcular porcentaje de asistencia
 export function calcularPorcentajeAsistencia(asistencias, totalSesiones) {

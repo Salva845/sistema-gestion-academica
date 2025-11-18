@@ -182,15 +182,15 @@ export default function DocenteCalificaciones() {
 
       console.log('👤 Perfiles encontrados:', profiles);
 
-      // Combinar inscripciones con profiles y calcular promedios
+      // Combinar inscripciones con profiles y calcular promedios usando PostgreSQL
       const estudiantesConPromedio = await Promise.all(
         (inscripciones || []).map(async (insc) => {
           const profile = profiles?.find(p => p.user_id === insc.estudiante_id);
           
           console.log(`Estudiante ${insc.estudiante_id}:`, profile);
           
-          const { data: cals } = await calificacionesService.obtenerCalificacionesPorGrupo(insc.id);
-          const promedio = calificacionesService.calcularPromedioPonderado(cals || []);
+          // Usar función que retorna calificaciones y promedio calculado en PostgreSQL
+          const { data: cals, promedio } = await calificacionesService.obtenerCalificacionesPorGrupo(insc.id);
           
           return {
             ...insc,
@@ -200,7 +200,7 @@ export default function DocenteCalificaciones() {
               apellido: 'Sin perfil',
               matricula: 'N/A'
             },
-            promedio: parseFloat(promedio)
+            promedio: promedio || 0
           };
         })
       );
@@ -226,12 +226,13 @@ export default function DocenteCalificaciones() {
 
   const loadCalificaciones = async () => {
     try {
-      const { data, error } = await calificacionesService.obtenerCalificacionesPorGrupo(
+      const { data, error, promedio } = await calificacionesService.obtenerCalificacionesPorGrupo(
         estudianteSeleccionado.id
       );
 
       if (error) throw error;
       setCalificaciones(data || []);
+      // El promedio ya viene calculado desde PostgreSQL
     } catch (error) {
       console.error('Error cargando calificaciones:', error);
     }
@@ -334,7 +335,8 @@ export default function DocenteCalificaciones() {
   };
 
   const grupoActual = misGrupos.find(g => g.id === grupoSeleccionado);
-  const promedioPonderado = calificacionesService.calcularPromedioPonderado(calificaciones);
+  // Obtener promedio del estudiante seleccionado (ya calculado en PostgreSQL)
+  const promedioPonderado = estudianteSeleccionado?.promedio || 0;
 
   return (
     <div className="min-h-screen bg-background">

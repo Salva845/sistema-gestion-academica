@@ -26,7 +26,7 @@ import {
 export default function DocenteAsistencia() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { grupoId, sesionId } = useParams();
+  const { sesionId } = useParams();
   const [sesionInfo, setSesionInfo] = useState(null);
   const [loadingInfo, setLoadingInfo] = useState(true);
 
@@ -108,7 +108,15 @@ export default function DocenteAsistencia() {
         <div className="container flex h-16 items-center px-8">
           <Button
             variant="ghost"
-            onClick={() => navigate(`/docente/grupos/${grupoId}`)}
+            onClick={() => {
+              // Obtener grupoId de la información de la sesión
+              const grupoId = sesionInfo?.grupos?.id || sesionInfo?.grupo_id;
+              if (grupoId) {
+                navigate(`/docente/grupos/${grupoId}`);
+              } else {
+                navigate('/docente/grupos');
+              }
+            }}
             className="gap-2"
           >
             <ArrowLeft className="h-4 w-4" />

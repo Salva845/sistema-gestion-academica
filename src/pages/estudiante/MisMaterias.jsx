@@ -245,16 +245,23 @@ const handleInscribir = async () => {
 
   try {
     // Primero verificar si ya existe una inscripción (activa o abandonada)
+    // Usar .maybeSingle() en lugar de .single() para evitar error 406 cuando no hay resultados
     const { data: inscripcionExistente, error: checkError } = await supabase
       .from('inscripciones')
       .select('*')
       .eq('estudiante_id', user.id)
       .eq('grupo_id', selectedGrupo.id)
-      .single();
+      .maybeSingle();
 
-    if (checkError && checkError.code !== 'PGRST116') {
-      // PGRST116 es "no se encontró", cualquier otro error es problema
-      throw checkError;
+    if (checkError) {
+      console.error('Error verificando inscripción existente:', checkError);
+      // Si es un error 406, puede ser un problema de RLS o formato
+      if (checkError.code === 'PGRST301' || checkError.message?.includes('406')) {
+        console.warn('Error 406 detectado, puede ser problema de RLS. Continuando...');
+        // Continuar como si no hubiera inscripción existente
+      } else {
+        throw checkError;
+      }
     }
 
     let error;

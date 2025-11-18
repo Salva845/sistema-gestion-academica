@@ -137,6 +137,37 @@ export function useAsistencia(sesionId) {
   }, []);
 
   /**
+   * Cargar estado inicial del QR desde la sesión
+   */
+  const cargarEstadoQR = useCallback(async () => {
+    if (!sesionId) return;
+
+    try {
+      const { data: sesion, error: err } = await asistenciaService.obtenerSesion(sesionId);
+      if (err || !sesion) return;
+
+      // Verificar si el QR está realmente activo (no expirado)
+      if (sesion.qr_activo && sesion.qr_expira_at) {
+        const ahora = new Date();
+        const expiraEn = new Date(sesion.qr_expira_at);
+        
+        if (ahora < expiraEn && sesion.qr_token) {
+          // QR está activo y no ha expirado
+          const segundosRestantes = Math.floor((expiraEn - ahora) / 1000);
+          setQrData({
+            token: sesion.qr_token,
+            expira_en: sesion.qr_expira_at
+          });
+          iniciarContador(segundosRestantes);
+          iniciarPollingAsistentes();
+        }
+      }
+    } catch (err) {
+      console.error('Error cargando estado QR:', err);
+    }
+  }, [sesionId, iniciarContador, iniciarPollingAsistentes]);
+
+  /**
    * Formatear tiempo restante
    */
   const formatearTiempo = useCallback((segundos) => {
@@ -153,12 +184,13 @@ export function useAsistencia(sesionId) {
     };
   }, [detenerContador, detenerPolling]);
 
-  // Cargar asistentes al montar si hay sesionId
+  // Cargar estado inicial del QR y asistentes al montar
   useEffect(() => {
     if (sesionId) {
+      cargarEstadoQR();
       cargarAsistentes();
     }
-  }, [sesionId, cargarAsistentes]);
+  }, [sesionId, cargarEstadoQR, cargarAsistentes]);
 
   return {
     qrData,

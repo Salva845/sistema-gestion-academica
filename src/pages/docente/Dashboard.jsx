@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { calificacionesService } from '../../services/calificaciones.service';
 import { User } from 'lucide-react'
 import { 
   Card, 
@@ -98,16 +99,97 @@ export default function DocenteDashboard() {
         promedioAsistencia: 87,
       });
 
-      // Datos para gráficas (simulados)
+      // Calcular datos reales para gráficas
+      const datosGraficas = await Promise.all(
+        (grupos || []).slice(0, 5).map(async (grupo) => {
+          // Calcular promedio de calificaciones del grupo
+          let promedioCalificaciones = 0;
+          try {
+            // Obtener inscripciones activas del grupo
+            const { data: inscripciones } = await supabase
+              .from('inscripciones')
+              .select('id')
+              .eq('grupo_id', grupo.id)
+              .eq('estado', 'activo');
+
+            if (inscripciones && inscripciones.length > 0) {
+              // Calcular promedio de cada inscripción
+              const promedios = await Promise.all(
+                inscripciones.map(async (insc) => {
+                  const { promedio } = await calificacionesService.obtenerCalificacionesPorGrupo(insc.id);
+                  return promedio || 0;
+                })
+              );
+
+              // Filtrar promedios válidos (> 0) y calcular promedio del grupo
+              const promediosValidos = promedios.filter(p => p > 0);
+              if (promediosValidos.length > 0) {
+                promedioCalificaciones = promediosValidos.reduce((sum, p) => sum + p, 0) / promediosValidos.length;
+              }
+            }
+          } catch (error) {
+            console.error(`Error calculando promedio para grupo ${grupo.id}:`, error);
+          }
+
+          // Calcular asistencia promedio del grupo
+          let asistenciaPromedio = 0;
+          try {
+            // Obtener sesiones del grupo
+            const { data: sesiones } = await supabase
+              .from('sesiones_clase')
+              .select('id')
+              .eq('grupo_id', grupo.id);
+
+            if (sesiones && sesiones.length > 0) {
+              // Obtener inscripciones del grupo
+              const { data: inscripciones } = await supabase
+                .from('inscripciones')
+                .select('estudiante_id')
+                .eq('grupo_id', grupo.id)
+                .eq('estado', 'activo');
+
+              if (inscripciones && inscripciones.length > 0) {
+                const sesionesIds = sesiones.map(s => s.id);
+                const estudiantesIds = inscripciones.map(i => i.estudiante_id);
+
+                // Contar asistencias
+                const { data: asistencias } = await supabase
+                  .from('asistencias')
+                  .select('id')
+                  .in('sesion_id', sesionesIds)
+                  .in('estudiante_id', estudiantesIds);
+
+                const totalSesiones = sesiones.length;
+                const totalEstudiantes = inscripciones.length;
+                const totalAsistencias = asistencias?.length || 0;
+                const totalPosibles = totalSesiones * totalEstudiantes;
+
+                if (totalPosibles > 0) {
+                  asistenciaPromedio = (totalAsistencias / totalPosibles) * 100;
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Error calculando asistencia para grupo ${grupo.id}:`, error);
+          }
+
+          return {
+            grupo: grupo.materias?.nombre?.substring(0, 15) || 'Grupo',
+            promedio: parseFloat(promedioCalificaciones.toFixed(2)),
+            asistencia: parseFloat(asistenciaPromedio.toFixed(2)),
+          };
+        })
+      );
+
       setChartData({
-        asistenciaPorGrupo: grupos?.slice(0, 5).map(g => ({
-          grupo: g.materias?.nombre?.substring(0, 15) || 'Grupo',
-          asistencia: Math.floor(Math.random() * 20) + 80,
-        })) || [],
-        calificacionesPorGrupo: grupos?.slice(0, 5).map(g => ({
-          grupo: g.materias?.nombre?.substring(0, 15) || 'Grupo',
-          promedio: (Math.random() * 2 + 8).toFixed(1),
-        })) || [],
+        asistenciaPorGrupo: datosGraficas.map(d => ({
+          grupo: d.grupo,
+          asistencia: d.asistencia,
+        })),
+        calificacionesPorGrupo: datosGraficas.map(d => ({
+          grupo: d.grupo,
+          promedio: d.promedio,
+        })),
       });
 
     } catch (error) {

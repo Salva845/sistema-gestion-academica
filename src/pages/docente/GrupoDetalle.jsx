@@ -68,23 +68,53 @@ export default function DocenteGrupoDetalle() {
       setGrupoInfo(grupo);
 
       // Cargar estudiantes inscritos
+      // Primero obtener las inscripciones
       const { data: inscripciones, error: inscripcionesError } = await supabase
         .from('inscripciones')
-        .select(`
-          *,
-          profiles:estudiante_id (
-            user_id,
-            nombre,
-            apellido,
-            matricula,
-            email
-          )
-        `)
+        .select('*')
         .eq('grupo_id', grupoId)
         .eq('estado', 'activo');
 
       if (inscripcionesError) throw inscripcionesError;
-      setEstudiantes(inscripciones || []);
+
+      // Luego obtener los perfiles de los estudiantes
+      if (inscripciones && inscripciones.length > 0) {
+        const estudiantesIds = inscripciones
+          .map(i => i.estudiante_id)
+          .filter(id => id != null); // Filtrar IDs nulos
+        
+        if (estudiantesIds.length > 0) {
+          const { data: profiles, error: profilesError } = await supabase
+            .from('profiles')
+            .select('user_id, nombre, apellido, matricula, email')
+            .in('user_id', estudiantesIds);
+
+          if (profilesError) {
+            console.error('Error obteniendo perfiles:', profilesError);
+            // Continuar sin perfiles en lugar de fallar completamente
+            setEstudiantes(inscripciones.map(inscripcion => ({
+              ...inscripcion,
+              profiles: null
+            })));
+          } else {
+            // Combinar inscripciones con perfiles
+            const estudiantesConPerfiles = inscripciones.map(inscripcion => ({
+              ...inscripcion,
+              profiles: profiles?.find(p => p.user_id === inscripcion.estudiante_id) || null
+            }));
+
+            setEstudiantes(estudiantesConPerfiles);
+          }
+        } else {
+          // Si no hay IDs válidos, establecer inscripciones sin perfiles
+          setEstudiantes(inscripciones.map(inscripcion => ({
+            ...inscripcion,
+            profiles: null
+          })));
+        }
+      } else {
+        setEstudiantes([]);
+      }
 
       // Cargar sesiones de clase
       const { data: sesionesData, error: sesionesError } = await supabase
@@ -92,6 +122,21 @@ export default function DocenteGrupoDetalle() {
         .select('*')
         .eq('grupo_id', grupoId)
         .order('fecha', { ascending: false });
+
+      // Verificar y actualizar el estado real del QR para cada sesión
+      // (qr_activo puede estar desactualizado si el QR expiró)
+      if (sesionesData) {
+        const ahora = new Date();
+        sesionesData.forEach(sesion => {
+          // Si qr_activo es true pero el QR expiró, considerarlo inactivo
+          if (sesion.qr_activo && sesion.qr_expira_at) {
+            const expiraEn = new Date(sesion.qr_expira_at);
+            if (ahora > expiraEn) {
+              sesion.qr_activo = false;
+            }
+          }
+        });
+      }
 
       if (sesionesError) throw sesionesError;
       setSesiones(sesionesData || []);
@@ -123,7 +168,7 @@ export default function DocenteGrupoDetalle() {
       if (error) throw error;
 
       // Navegar a la página de asistencia
-      navigate(`/docente/grupos/${grupoId}/sesion/${data.id}/asistencia`);
+      navigate(`/docente/asistencia/${data.id}`);
     } catch (error) {
       console.error('Error creando sesión:', error);
       alert('Error al crear la sesión de clase');
@@ -376,7 +421,7 @@ export default function DocenteGrupoDetalle() {
                               </Badge>
                             )}
                             <Button
-                              onClick={() => navigate(`/docente/grupos/${grupoId}/sesion/${sesion.id}/asistencia`)}
+                              onClick={() => navigate(`/docente/asistencia/${sesion.id}`)}
                               variant="outline"
                               size="sm"
                               className="gap-2"

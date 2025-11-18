@@ -67,6 +67,8 @@ export default function EstudianteMisCalificaciones() {
     materiasReprobadas: 0,
     totalMaterias: 0,
   });
+  const [evolucionData, setEvolucionData] = useState([]);
+  const [materiaSeleccionadaEvolucion, setMateriaSeleccionadaEvolucion] = useState('all');
 
   useEffect(() => {
     if (user) {
@@ -94,18 +96,17 @@ export default function EstudianteMisCalificaciones() {
 
       if (inscError) throw inscError;
 
-      // Para cada inscripción, obtener calificaciones y calcular promedio
+      // Para cada inscripción, obtener calificaciones y calcular promedio usando PostgreSQL
       const materiasConCalificaciones = await Promise.all(
         (inscripciones || []).map(async (insc) => {
-          const { data: cals } = await calificacionesService.obtenerCalificacionesPorGrupo(insc.id);
-          const promedio = calificacionesService.calcularPromedioPonderado(cals || []);
+          const { data: cals, promedio } = await calificacionesService.obtenerCalificacionesPorGrupo(insc.id);
           
           return {
             inscripcion: insc,
             materia: insc.grupos?.materias,
             grupo: insc.grupos,
             calificaciones: cals || [],
-            promedio: parseFloat(promedio)
+            promedio: promedio || 0
           };
         })
       );
@@ -140,12 +141,84 @@ export default function EstudianteMisCalificaciones() {
         totalMaterias: materiasConCalificaciones.length,
       });
 
+      // Cargar datos de evolución para la gráfica de línea de tiempo
+      await loadEvolucionData(materiasConCalificaciones);
+
     } catch (error) {
       console.error('Error cargando calificaciones:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const loadEvolucionData = async (materias) => {
+    try {
+      if (materiaSeleccionadaEvolucion === 'all') {
+        // Si es 'all', combinar datos de todas las materias
+        const todasEvoluciones = await Promise.all(
+          materias.map(async (m) => {
+            const { data } = await calificacionesService.obtenerEvolucionCalificaciones(
+              m.inscripcion.id,
+              'semana'
+            );
+            return (data || []).map(item => ({
+              ...item,
+              materia: m.materia?.nombre || 'Materia',
+              periodo: new Date(item.periodo).toLocaleDateString('es-MX', { 
+                month: 'short', 
+                day: 'numeric' 
+              })
+            }));
+          })
+        );
+
+        // Agrupar por fecha y calcular promedio general
+        const fechasUnicas = [...new Set(todasEvoluciones.flat().map(e => e.periodo))].sort();
+        const evolucionAgrupada = fechasUnicas.map(fecha => {
+          const valores = todasEvoluciones
+            .flat()
+            .filter(e => e.periodo === fecha)
+            .map(e => e.promedio_acumulado)
+            .filter(v => v > 0);
+          
+          return {
+            periodo: fecha,
+            promedio: valores.length > 0 
+              ? (valores.reduce((sum, v) => sum + v, 0) / valores.length).toFixed(2)
+              : 0
+          };
+        });
+
+        setEvolucionData(evolucionAgrupada);
+      } else {
+        // Cargar evolución de una materia específica
+        const materia = materias.find(m => m.inscripcion.id === materiaSeleccionadaEvolucion);
+        if (materia) {
+          const { data } = await calificacionesService.obtenerEvolucionCalificaciones(
+            materia.inscripcion.id,
+            'semana'
+          );
+          const evolucion = (data || []).map(item => ({
+            periodo: new Date(item.periodo).toLocaleDateString('es-MX', { 
+              month: 'short', 
+              day: 'numeric' 
+            }),
+            promedio: parseFloat(item.promedio_acumulado || 0).toFixed(2)
+          }));
+          setEvolucionData(evolucion);
+        }
+      }
+    } catch (error) {
+      console.error('Error cargando datos de evolución:', error);
+      setEvolucionData([]);
+    }
+  };
+
+  useEffect(() => {
+    if (misMaterias.length > 0) {
+      loadEvolucionData(misMaterias);
+    }
+  }, [materiaSeleccionadaEvolucion]);
 
   const getTipoLabel = (tipo) => {
     const labels = {
@@ -356,11 +429,11 @@ export default function EstudianteMisCalificaciones() {
                             <CardTitle className="text-lg leading-tight">
                               {materia.materia?.nombre}
                             </CardTitle>
-                            <CardDescription className="mt-1">
+                            <div className="mt-1">
                               <Badge variant="outline" className="text-xs">
                                 {materia.materia?.codigo}
                               </Badge>
-                            </CardDescription>
+                            </div>
                           </div>
                           {materia.promedio > 0 && (
                             <Badge variant={getPromedioBadge(materia.promedio)} className="text-lg">
@@ -508,6 +581,72 @@ export default function EstudianteMisCalificaciones() {
 
             {/* Tab: Gráficas */}
             <TabsContent value="graficas" className="space-y-6">
+              {/* Evolución Temporal - Gráfica de Línea de Tiempo */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Evolución de Calificaciones</CardTitle>
+                      <CardDescription>Línea de tiempo de tu rendimiento académico</CardDescription>
+                    </div>
+                    <Select 
+                      value={materiaSeleccionadaEvolucion} 
+                      onValueChange={setMateriaSeleccionadaEvolucion}
+                    >
+                      <SelectTrigger className="w-[200px]">
+                        <SelectValue placeholder="Todas las materias" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas las materias</SelectItem>
+                        {misMaterias.map(m => (
+                          <SelectItem key={m.inscripcion.id} value={m.inscripcion.id}>
+                            {m.materia?.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {evolucionData.length === 0 ? (
+                    <div className="text-center py-12">
+                      <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">
+                        No hay datos suficientes para mostrar la evolución
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={350}>
+                      <LineChart data={evolucionData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis 
+                          dataKey="periodo" 
+                          angle={-45} 
+                          textAnchor="end" 
+                          height={100}
+                          interval={0}
+                        />
+                        <YAxis domain={[0, 10]} />
+                        <Tooltip 
+                          formatter={(value) => [`${value}`, 'Promedio']}
+                          labelFormatter={(label) => `Fecha: ${label}`}
+                        />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="promedio" 
+                          stroke="#3b82f6" 
+                          strokeWidth={3}
+                          name="Promedio Acumulado"
+                          dot={{ r: 5 }}
+                          activeDot={{ r: 8 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Promedio por Materia */}
               <Card>
                 <CardHeader>
