@@ -5,6 +5,7 @@
 
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { toast } from 'sonner';
 
 const AuthContext = createContext({});
 
@@ -38,6 +39,9 @@ export const AuthProvider = ({ children }) => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       if (session?.user) {
+        // Asegurar que loading sea true mientras cargamos el perfil
+        // Esto evita que ProtectedRoute redirija a /unauthorized prematuramente
+        setLoading(true);
         loadProfile(session.user.id);
       } else {
         setProfile(null);
@@ -61,13 +65,14 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (!data) {
-        console.warn('No se encontró perfil para el usuario.'); 
+        console.warn('No se encontró perfil para el usuario.');
         setProfile(null);
       } else {
         setProfile(data);
       }
     } catch (error) {
       console.error('Error cargando perfil:', error.message);
+      toast.error('Error al cargar el perfil de usuario');
     } finally {
       setLoading(false);
     }
@@ -124,8 +129,9 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
-  // Determinar el rol desde el perfil (no desde metadata)
-  const userRole = profile?.role || user?.user_metadata?.role || 'estudiante';
+  // Determinar el rol desde el perfil (single source of truth)
+  // Fallback a 'estudiante' solo si no hay perfil cargado aún
+  const userRole = profile?.role || 'estudiante';
 
   const value = {
     user,
