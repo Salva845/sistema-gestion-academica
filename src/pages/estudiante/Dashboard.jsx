@@ -8,15 +8,22 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { User } from 'lucide-react';
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
 } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
 import {
   BookOpen,
   QrCode,
@@ -31,6 +38,7 @@ import {
   AlertCircle,
   CheckCircle,
   XCircle,
+  MapPin,
 } from 'lucide-react';
 import {
   BarChart,
@@ -49,6 +57,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { parseHorario } from '../../utils/dashboardCalculations';
 
 export default function EstudianteDashboard() {
   const { profile, user, signOut } = useAuth();
@@ -69,6 +78,8 @@ export default function EstudianteDashboard() {
   });
 
   const [proximasClases, setProximasClases] = useState([]);
+  const [horarioDialogOpen, setHorarioDialogOpen] = useState(false);
+  const [horarioSemanal, setHorarioSemanal] = useState({});
 
   useEffect(() => {
     loadEstudianteData();
@@ -128,12 +139,72 @@ export default function EstudianteDashboard() {
         ],
       });
 
-      // Próximas clases (simulado)
-      setProximasClases([
-        { materia: 'Programación I', hora: '10:00', salon: 'A-201', estado: 'pending' },
-        { materia: 'Cálculo', hora: '12:00', salon: 'B-305', estado: 'pending' },
-        { materia: 'Bases de Datos', hora: '14:00', salon: 'C-102', estado: 'pending' },
-      ]);
+      // Calcular próximas clases reales
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const nowTime = today.getHours() * 60 + today.getMinutes();
+
+      const clasesHoy = (inscripciones || [])
+        .map(ins => {
+          const grupo = ins.grupos;
+          const horario = parseHorario(grupo?.horario);
+
+          if (!horario || !horario.days.includes(dayOfWeek)) return null;
+
+          const [startHour, startMin] = horario.startTime.split(':').map(Number);
+          const [endHour, endMin] = horario.endTime.split(':').map(Number);
+          const startTimeVal = startHour * 60 + startMin;
+          const endTimeVal = endHour * 60 + endMin;
+
+          // Solo mostrar si la clase no ha terminado
+          if (endTimeVal <= nowTime) return null;
+
+          return {
+            materia: grupo.materias?.nombre,
+            hora: `${horario.startTime} - ${horario.endTime}`,
+            salon: grupo.salon || 'Por asignar',
+            startTimeVal
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.startTimeVal - b.startTimeVal);
+
+      setProximasClases(clasesHoy);
+
+      // Organizar horario semanal
+      const horarioMap = {
+        1: [], // Lunes
+        2: [], // Martes
+        3: [], // Miércoles
+        4: [], // Jueves
+        5: [], // Viernes
+        6: [], // Sábado
+        0: []  // Domingo
+      };
+
+      (inscripciones || []).forEach(ins => {
+        const grupo = ins.grupos;
+        const horario = parseHorario(grupo?.horario);
+
+        if (horario) {
+          horario.days.forEach(day => {
+            horarioMap[day].push({
+              materia: grupo.materias?.nombre,
+              codigo: grupo.materias?.codigo,
+              hora: `${horario.startTime} - ${horario.endTime}`,
+              salon: grupo.salon || 'Por asignar',
+              startTimeVal: parseInt(horario.startTime.replace(':', ''))
+            });
+          });
+        }
+      });
+
+      // Ordenar clases por hora
+      Object.keys(horarioMap).forEach(day => {
+        horarioMap[day].sort((a, b) => a.startTimeVal - b.startTimeVal);
+      });
+
+      setHorarioSemanal(horarioMap);
 
     } catch (error) {
       console.error('Error cargando datos:', error);
@@ -195,7 +266,7 @@ export default function EstudianteDashboard() {
             <GraduationCap className="h-6 w-6 text-primary" />
             <span className="text-xl font-bold">Mi Portal Estudiantil</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <div className="text-right hidden md:block">
               <p className="text-sm font-medium">{profile?.nombre} {profile?.apellido}</p>
@@ -205,8 +276,8 @@ export default function EstudianteDashboard() {
             <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
             </Button>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => navigate('/profile')}
               title="Mi Perfil"
@@ -275,16 +346,16 @@ export default function EstudianteDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
-                <Button 
-                  onClick={() => navigate('/estudiante/materias')} 
+                <Button
+                  onClick={() => navigate('/estudiante/materias')}
                   className="h-24 flex flex-col gap-2"
                   size="lg"
                 >
                   <BookOpen className="h-8 w-8" />
                   <span className="text-sm">Mis Materias</span>
                 </Button>
-                <Button 
-                  onClick={() => navigate('/estudiante/asistencia')} 
+                <Button
+                  onClick={() => navigate('/estudiante/asistencia')}
                   className="h-24 flex flex-col gap-2"
                   size="lg"
                   variant="outline"
@@ -292,8 +363,8 @@ export default function EstudianteDashboard() {
                   <QrCode className="h-8 w-8" />
                   <span className="text-sm">Registrar Asistencia</span>
                 </Button>
-                <Button 
-                  onClick={() => navigate('/estudiante/calificaciones')} 
+                <Button
+                  onClick={() => navigate('/estudiante/calificaciones')}
                   className="h-24 flex flex-col gap-2"
                   size="lg"
                   variant="outline"
@@ -307,29 +378,43 @@ export default function EstudianteDashboard() {
 
           {/* Próximas Clases */}
           <Card>
-            <CardHeader>
-              <CardTitle>Próximas Clases</CardTitle>
-              <CardDescription>Hoy</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div className="space-y-1">
+                <CardTitle>Próximas Clases</CardTitle>
+                <CardDescription>Hoy</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setHorarioDialogOpen(true)}>
+                <Calendar className="h-4 w-4 mr-2" />
+                Ver Horario
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {proximasClases.map((clase, index) => (
-                  <div 
-                    key={index}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
-                  >
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{clase.materia}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {clase.hora} • {clase.salon}
-                      </p>
+                <div className="space-y-3">
+                  {proximasClases.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <p>No hay más clases por hoy</p>
                     </div>
-                    <Badge variant="outline" className="text-xs">
-                      {clase.hora}
-                    </Badge>
-                  </div>
-                ))}
+                  ) : (
+                    proximasClases.map((clase, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors"
+                      >
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{clase.materia}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {clase.hora} • {clase.salon}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {clase.hora.split(' - ')[0]}
+                        </Badge>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -392,8 +477,8 @@ export default function EstudianteDashboard() {
                           <Clock className="h-4 w-4 mr-2" />
                           Salón: {grupo?.salon || 'Por asignar'}
                         </div>
-                        <Button 
-                          className="w-full mt-3" 
+                        <Button
+                          className="w-full mt-3"
                           variant="outline"
                           size="sm"
                           onClick={() => navigate(`/estudiante/materias/${inscripcion.id}`)}
@@ -464,10 +549,10 @@ export default function EstudianteDashboard() {
                 <YAxis domain={[0, 10]} />
                 <Tooltip />
                 <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="promedio" 
-                  stroke="#3b82f6" 
+                <Line
+                  type="monotone"
+                  dataKey="promedio"
+                  stroke="#3b82f6"
                   strokeWidth={3}
                   name="Promedio General"
                   dot={{ r: 6 }}
@@ -498,6 +583,55 @@ export default function EstudianteDashboard() {
           </Card>
         )}
       </main>
+
+      {/* Dialog Horario */}
+      <Dialog open={horarioDialogOpen} onOpenChange={setHorarioDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Horario de Clases</DialogTitle>
+            <DialogDescription>Tu horario semanal completo</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mt-4">
+            {[1, 2, 3, 4, 5, 6].map(dayIndex => {
+              const clases = horarioSemanal[dayIndex];
+              if (!clases || clases.length === 0) return null;
+
+              const daysNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+              return (
+                <Card key={dayIndex} className="border-l-4 border-l-primary">
+                  <CardHeader className="py-3 bg-muted/50">
+                    <CardTitle className="text-base">{daysNames[dayIndex]}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-3 space-y-3">
+                    {clases.map((clase, idx) => (
+                      <div key={idx} className="text-sm border-b last:border-0 pb-2 last:pb-0">
+                        <p className="font-semibold">{clase.materia}</p>
+                        <div className="flex justify-between text-muted-foreground mt-1">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> {clase.hora}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3" /> {clase.salon}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
+
+            {Object.values(horarioSemanal).every(day => day.length === 0) && (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                <Calendar className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p>No tienes clases registradas con horario asignado</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

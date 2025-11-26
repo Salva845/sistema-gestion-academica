@@ -719,3 +719,30 @@ const formatearPeriodo = (fecha, agruparPor) => {
     }
     return fecha.toLocaleDateString('es-MX', { month: 'short', year: 'numeric' });
 };
+
+export const parseHorario = (horarioStr) => {
+    if (!horarioStr) return null;
+
+    // Normalizar: minúsculas y sin acentos
+    const normalized = horarioStr.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    // Buscar rango de horas (ej. 10:00-12:00)
+    const timeMatch = normalized.match(/(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})/);
+    if (!timeMatch) return null;
+
+    const startTime = timeMatch[1];
+    const endTime = timeMatch[2];
+
+    // Identificar días
+    const days = [];
+    if (normalized.includes('lun')) days.push(1);
+    if (normalized.includes('mar')) days.push(2);
+    if (normalized.includes('mie') || normalized.includes('mier')) days.push(3);
+    if (normalized.includes('jue')) days.push(4);
+    if (normalized.includes('vie')) days.push(5);
+    if (normalized.includes('sab')) days.push(6);
+    if (normalized.includes('dom')) days.push(0);
+
+    return { days, startTime, endTime };
+};
