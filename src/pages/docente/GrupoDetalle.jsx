@@ -10,7 +10,7 @@ import { supabase } from '../../lib/supabase';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { 
+import {
   ArrowLeft,
   Users,
   Calendar,
@@ -22,7 +22,8 @@ import {
   BookOpen,
   Award,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Trash2
 } from 'lucide-react';
 import {
   Tabs,
@@ -82,7 +83,7 @@ export default function DocenteGrupoDetalle() {
         const estudiantesIds = inscripciones
           .map(i => i.estudiante_id)
           .filter(id => id != null); // Filtrar IDs nulos
-        
+
         if (estudiantesIds.length > 0) {
           const { data: profiles, error: profilesError } = await supabase
             .from('profiles')
@@ -156,7 +157,9 @@ export default function DocenteGrupoDetalle() {
         grupo_id: grupoId,
         fecha: new Date().toISOString().split('T')[0],
         hora_inicio: new Date().toTimeString().split(' ')[0].substring(0, 5),
-        tema: `Clase del ${new Date().toLocaleDateString('es-MX')}`
+        tema: `Clase del ${new Date().toLocaleDateString('es-MX')}`,
+        token_sesion: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
+        expira_en: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() // 2 horas de validez por defecto
       };
 
       const { data, error } = await supabase
@@ -172,6 +175,27 @@ export default function DocenteGrupoDetalle() {
     } catch (error) {
       console.error('Error creando sesión:', error);
       alert('Error al crear la sesión de clase');
+    }
+  };
+
+  const eliminarSesion = async (sesionId) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta sesión? Esta acción no se puede deshacer.')) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('sesiones_clase')
+        .delete()
+        .eq('id', sesionId);
+
+      if (error) throw error;
+
+      // Actualizar la lista de sesiones
+      setSesiones(sesiones.filter(s => s.id !== sesionId));
+    } catch (error) {
+      console.error('Error eliminando sesión:', error);
+      alert('Error al eliminar la sesión');
     }
   };
 
@@ -391,9 +415,8 @@ export default function DocenteGrupoDetalle() {
                           className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors"
                         >
                           <div className="flex items-center gap-4">
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                              sesion.qr_activo ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
-                            }`}>
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${sesion.qr_activo ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+                              }`}>
                               {sesion.qr_activo ? (
                                 <CheckCircle className="w-6 h-6" />
                               ) : (
@@ -428,6 +451,14 @@ export default function DocenteGrupoDetalle() {
                             >
                               <Eye className="h-4 w-4" />
                               Ver Asistencia
+                            </Button>
+                            <Button
+                              onClick={() => eliminarSesion(sesion.id)}
+                              variant="destructive"
+                              size="sm"
+                              className="gap-2"
+                            >
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
