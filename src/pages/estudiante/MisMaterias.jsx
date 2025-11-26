@@ -136,7 +136,7 @@ export default function MisMaterias() {
 
   const loadData = async () => {
     try {
-  setLoading(true);
+      setLoading(true);
       await Promise.all([
         loadMisInscripciones(),
         loadGruposDisponibles(),
@@ -164,7 +164,7 @@ export default function MisMaterias() {
         .eq('estado', 'activo');
 
       if (error) throw error;
-      
+
       setMisInscripciones(data || []);
     } catch (error) {
       console.error('Error cargando inscripciones:', error);
@@ -173,17 +173,17 @@ export default function MisMaterias() {
 
   const loadGruposDisponibles = async () => {
     try {
-        // Obtener IDs de grupos ya inscritos (solo activos)
-        const { data: inscripciones } = await supabase
+      // Obtener IDs de grupos ya inscritos (solo activos)
+      const { data: inscripciones } = await supabase
         .from('inscripciones')
         .select('grupo_id')
         .eq('estudiante_id', user.id)
         .eq('estado', 'activo');
 
-        const gruposInscritos = inscripciones?.map(i => i.grupo_id) || [];
+      const gruposInscritos = inscripciones?.map(i => i.grupo_id) || [];
 
-        // Obtener todos los grupos activos
-        let query = supabase
+      // Obtener todos los grupos activos
+      let query = supabase
         .from('grupos')
         .select(`
             *,
@@ -193,134 +193,152 @@ export default function MisMaterias() {
         .eq('activo', true)
         .order('periodo', { ascending: false });
 
-        // Excluir grupos ya inscritos
-        if (gruposInscritos.length > 0) {
+      // Excluir grupos ya inscritos
+      if (gruposInscritos.length > 0) {
         query = query.not('id', 'in', `(${gruposInscritos.join(',')})`);
-        }
+      }
 
-  const { data: grupos, error } = await query;
-  if (error) throw error;
+      const { data: grupos, error } = await query;
+      if (error) throw error;
 
-        // Obtener el conteo de inscripciones activas para cada grupo
-        const gruposIds = grupos?.map(g => g.id) || [];
-        
-        if (gruposIds.length === 0) {
+      // Obtener el conteo de inscripciones activas para cada grupo
+      const gruposIds = grupos?.map(g => g.id) || [];
+
+      if (gruposIds.length === 0) {
         setGruposDisponibles([]);
         return;
-        }
+      }
 
+      // Crear mapa de conteos
+      const conteoMap = {};
+
+      // Intentar usar la función RPC segura primero
+      try {
+        const { data: conteosRpc, error: rpcError } = await supabase
+          .rpc('obtener_cupos_grupos', { p_grupos_ids: gruposIds });
+
+        if (!rpcError && conteosRpc) {
+          conteosRpc.forEach(c => {
+            conteoMap[c.grupo_id] = c.count;
+          });
+        } else {
+          throw rpcError || new Error('RPC no disponible');
+        }
+      } catch (rpcErr) {
+        console.warn('RPC obtener_cupos_grupos falló, usando fallback (puede ser inexacto por RLS):', rpcErr);
+
+        // Fallback: consulta directa (limitada por RLS)
         const { data: conteos, error: conteoError } = await supabase
-        .from('inscripciones')
-        .select('grupo_id')
-        .in('grupo_id', gruposIds)
-        .eq('estado', 'activo');
+          .from('inscripciones')
+          .select('grupo_id')
+          .in('grupo_id', gruposIds)
+          .eq('estado', 'activo');
 
         if (conteoError) throw conteoError;
 
-        // Crear mapa de conteos
-        const conteoMap = {};
         conteos?.forEach(insc => {
-        conteoMap[insc.grupo_id] = (conteoMap[insc.grupo_id] || 0) + 1;
-    });
+          conteoMap[insc.grupo_id] = (conteoMap[insc.grupo_id] || 0) + 1;
+        });
+      }
 
-        // Combinar datos y filtrar por cupo
-        const gruposConCupo = (grupos || [])
+      // Combinar datos y filtrar por cupo
+      const gruposConCupo = (grupos || [])
         .map(grupo => ({
-            ...grupo,
-            inscripciones: [{ count: conteoMap[grupo.id] || 0 }]
+          ...grupo,
+          inscripciones: [{ count: conteoMap[grupo.id] || 0 }]
         }))
         .filter(grupo => {
-            const ocupacion = grupo.inscripciones[0].count;
-            return ocupacion < grupo.cupo_maximo;
+          const ocupacion = grupo.inscripciones[0].count;
+          return ocupacion < grupo.cupo_maximo;
         });
 
-        setGruposDisponibles(gruposConCupo);
+      setGruposDisponibles(gruposConCupo);
     } catch (error) {
-        console.error('Error cargando grupos disponibles:', error);
+      console.error('Error cargando grupos disponibles:', error);
     }
-};
+  };
 
-const handleInscribir = async () => {
-  if (!selectedGrupo) return;
+  const handleInscribir = async () => {
+    if (!selectedGrupo) return;
 
-  try {
-    // Primero verificar si ya existe una inscripción (activa o abandonada)
-    // Usar .maybeSingle() en lugar de .single() para evitar error 406 cuando no hay resultados
-    const { data: inscripcionExistente, error: checkError } = await supabase
-      .from('inscripciones')
-      .select('*')
-      .eq('estudiante_id', user.id)
-      .eq('grupo_id', selectedGrupo.id)
-      .maybeSingle();
+    try {
+      // Primero verificar si ya existe una inscripción (activa o abandonada)
+      // Usar .maybeSingle() en lugar de .single() para evitar error 406 cuando no hay resultados
+      const { data: inscripcionExistente, error: checkError } = await supabase
+        .from('inscripciones')
+        .select('*')
+        .eq('estudiante_id', user.id)
+        .eq('grupo_id', selectedGrupo.id)
+        .maybeSingle();
 
-    if (checkError) {
-      console.error('Error verificando inscripción existente:', checkError);
-      // Si es un error 406, puede ser un problema de RLS o formato
-      if (checkError.code === 'PGRST301' || checkError.message?.includes('406')) {
-        console.warn('Error 406 detectado, puede ser problema de RLS. Continuando...');
-        // Continuar como si no hubiera inscripción existente
+      if (checkError) {
+        console.error('Error verificando inscripción existente:', checkError);
+        // Si es un error 406, puede ser un problema de RLS o formato
+        if (checkError.code === 'PGRST301' || checkError.message?.includes('406')) {
+          console.warn('Error 406 detectado, puede ser problema de RLS. Continuando...');
+          // Continuar como si no hubiera inscripción existente
+        } else {
+          throw checkError;
+        }
+      }
+
+      let error;
+
+      if (inscripcionExistente) {
+        // Si existe, verificar su estado
+        if (inscripcionExistente.estado === 'activo') {
+          setMessage({
+            type: 'error',
+            text: 'Ya estás inscrito en esta materia'
+          });
+          setInscribirDialog(false);
+          return;
+        }
+
+        // Si está abandonada, reactivarla
+        const { error: updateError } = await supabase
+          .from('inscripciones')
+          .update({
+            estado: 'activo'
+          })
+          .eq('id', inscripcionExistente.id);
+
+        error = updateError;
       } else {
-        throw checkError;
-      }
-    }
+        // Si no existe, crear nueva inscripción
+        const { error: insertError } = await supabase
+          .from('inscripciones')
+          .insert([{
+            estudiante_id: user.id,
+            grupo_id: selectedGrupo.id,
+            estado: 'activo',
+          }]);
 
-    let error;
-
-    if (inscripcionExistente) {
-      // Si existe, verificar su estado
-      if (inscripcionExistente.estado === 'activo') {
-        setMessage({ 
-          type: 'error', 
-          text: 'Ya estás inscrito en esta materia' 
-        });
-        setInscribirDialog(false);
-        return;
+        error = insertError;
       }
 
-      // Si está abandonada, reactivarla
-      const { error: updateError } = await supabase
-        .from('inscripciones')
-        .update({ 
-          estado: 'activo'
-        })
-        .eq('id', inscripcionExistente.id);
+      if (error) throw error;
 
-      error = updateError;
-    } else {
-      // Si no existe, crear nueva inscripción
-      const { error: insertError } = await supabase
-        .from('inscripciones')
-        .insert([{
-          estudiante_id: user.id,
-          grupo_id: selectedGrupo.id,
-          estado: 'activo',
-        }]);
+      setMessage({
+        type: 'success',
+        text: '¡Te has inscrito exitosamente a la materia!'
+      });
+      setInscribirDialog(false);
+      setSelectedGrupo(null);
 
-      error = insertError;
+      // Recargar datos
+      setTimeout(() => {
+        loadData();
+        setMessage({ type: '', text: '' });
+      }, 2000);
+    } catch (error) {
+      console.error('Error inscribiendo:', error);
+      setMessage({
+        type: 'error',
+        text: 'Error al inscribirse. Verifica que el grupo tenga cupo disponible.'
+      });
     }
-
-    if (error) throw error;
-
-    setMessage({ 
-      type: 'success', 
-      text: '¡Te has inscrito exitosamente a la materia!' 
-    });
-    setInscribirDialog(false);
-    setSelectedGrupo(null);
-    
-    // Recargar datos
-    setTimeout(() => {
-      loadData();
-      setMessage({ type: '', text: '' });
-    }, 2000);
-  } catch (error) {
-    console.error('Error inscribiendo:', error);
-    setMessage({ 
-      type: 'error', 
-      text: 'Error al inscribirse. Verifica que el grupo tenga cupo disponible.' 
-    });
-  }
-};
+  };
 
   const handleDesinscribir = async (inscripcionId, nombreMateria) => {
     if (!confirm(`¿Estás seguro de que quieres darte de baja de ${nombreMateria}?`)) return;
@@ -334,7 +352,7 @@ const handleInscribir = async () => {
       if (error) throw error;
 
       setMessage({ type: 'success', text: 'Te has dado de baja exitosamente' });
-      
+
       setTimeout(() => {
         loadData();
         setMessage({ type: '', text: '' });
@@ -354,23 +372,23 @@ const handleInscribir = async () => {
   // Filtrar mis materias
   const filteredInscripciones = misInscripciones.filter((inscripcion) => {
     const grupo = inscripcion.grupos;
-    const matchesSearch = 
+    const matchesSearch =
       grupo?.materias?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       grupo?.materias?.codigo.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesPeriodo = periodoFilter === 'all' || grupo?.periodo === periodoFilter;
-    
+
     return matchesSearch && matchesPeriodo;
   });
 
   // Filtrar grupos disponibles
   const filteredDisponibles = gruposDisponibles.filter((grupo) => {
-    const matchesSearch = 
+    const matchesSearch =
       grupo.materias?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
       grupo.materias?.codigo.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesPeriodo = periodoFilter === 'all' || grupo.periodo === periodoFilter;
-    
+
     return matchesSearch && matchesPeriodo;
   });
 
@@ -413,11 +431,10 @@ const handleInscribir = async () => {
           {/* Message Alert */}
           {message.text && (
             <div
-              className={`flex items-center gap-2 p-4 rounded-lg ${
-                message.type === 'success'
+              className={`flex items-center gap-2 p-4 rounded-lg ${message.type === 'success'
                   ? 'bg-green-50 text-green-900 border border-green-200 dark:bg-green-950 dark:text-green-100'
                   : 'bg-red-50 text-red-900 border border-red-200 dark:bg-red-950 dark:text-red-100'
-              }`}
+                }`}
             >
               {message.type === 'success' ? (
                 <CheckCircle className="h-5 w-5" />
@@ -555,7 +572,7 @@ const handleInscribir = async () => {
                     const grupo = inscripcion.grupos;
                     const materia = grupo?.materias;
                     const docente = grupo?.docente;
-                    
+
                     return (
                       <Card key={inscripcion.id} className="hover:shadow-lg transition-all">
                         <CardHeader>
@@ -604,14 +621,14 @@ const handleInscribir = async () => {
                           </div>
 
                           <div className="pt-3 border-t space-y-2">
-                            <Button 
-                              className="w-full" 
+                            <Button
+                              className="w-full"
                               onClick={() => navigate(`/estudiante/materias/${inscripcion.id}`)}
                             >
                               Ver Detalles
                             </Button>
-                            <Button 
-                              variant="outline" 
+                            <Button
+                              variant="outline"
                               size="sm"
                               className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
                               onClick={() => handleDesinscribir(inscripcion.id, materia?.nombre)}
@@ -662,7 +679,7 @@ const handleInscribir = async () => {
                     const ocupacion = grupo.inscripciones?.[0]?.count || 0;
                     const disponibles = grupo.cupo_maximo - ocupacion;
                     const porcentaje = Math.round((ocupacion / grupo.cupo_maximo) * 100);
-                    
+
                     return (
                       <Card key={grupo.id} className="hover:shadow-lg transition-all">
                         <CardHeader>
@@ -691,8 +708,8 @@ const handleInscribir = async () => {
                               <UserCheck className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                               <div>
                                 <p className="font-medium">
-                                    {getDocenteFullName(docente)}
-                                  </p>
+                                  {getDocenteFullName(docente)}
+                                </p>
                                 <p className="text-xs text-muted-foreground">Docente</p>
                               </div>
                             </div>
@@ -724,11 +741,10 @@ const handleInscribir = async () => {
                                 <Users className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-muted-foreground">Cupo:</span>
                               </div>
-                              <span className={`font-medium ${
-                                disponibles <= 5 ? 'text-red-600' :
-                                disponibles <= 10 ? 'text-yellow-600' :
-                                'text-green-600'
-                              }`}>
+                              <span className={`font-medium ${disponibles <= 5 ? 'text-red-600' :
+                                  disponibles <= 10 ? 'text-yellow-600' :
+                                    'text-green-600'
+                                }`}>
                                 {disponibles} lugares
                               </span>
                             </div>
@@ -736,12 +752,11 @@ const handleInscribir = async () => {
                             {/* Barra de progreso */}
                             <div className="space-y-1">
                               <div className="h-2 bg-secondary rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full transition-all ${
-                                    porcentaje >= 90 ? 'bg-red-500' :
-                                    porcentaje >= 70 ? 'bg-yellow-500' :
-                                    'bg-green-500'
-                                  }`}
+                                <div
+                                  className={`h-full transition-all ${porcentaje >= 90 ? 'bg-red-500' :
+                                      porcentaje >= 70 ? 'bg-yellow-500' :
+                                        'bg-green-500'
+                                    }`}
                                   style={{ width: `${porcentaje}%` }}
                                 />
                               </div>
@@ -753,8 +768,8 @@ const handleInscribir = async () => {
                           </div>
 
                           <div className="pt-3 border-t">
-                            <Button 
-                              className="w-full gap-2" 
+                            <Button
+                              className="w-full gap-2"
                               onClick={() => {
                                 setSelectedGrupo(grupo);
                                 setInscribirDialog(true);
@@ -798,7 +813,7 @@ const handleInscribir = async () => {
                   </Badge>
                 </div>
               </div>
-              
+
               <div className="space-y-2 text-sm border-t pt-4">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Docente:</span>
