@@ -9,12 +9,13 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { calificacionesService } from '../../services/calificaciones.service';
 import { User } from 'lucide-react'
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import { toast } from 'sonner';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
 } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -207,8 +208,8 @@ export default function DocenteDashboard() {
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
             <h3 className="text-3xl font-bold mt-2">{value}</h3>
             {action && (
-              <Button 
-                variant="link" 
+              <Button
+                variant="link"
                 className="mt-2 p-0 h-auto text-primary"
                 onClick={action.onClick}
               >
@@ -244,14 +245,14 @@ export default function DocenteDashboard() {
             <GraduationCap className="h-6 w-6 text-primary" />
             <span className="text-xl font-bold">Panel Docente</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <Badge variant="secondary">Docente</Badge>
-            <Button variant="ghost" size="icon">
+            {/* <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
-            </Button>
-            <Button 
-              variant="ghost" 
+            </Button> */}
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => navigate('/profile')}
               title="Mi Perfil"
@@ -298,7 +299,7 @@ export default function DocenteDashboard() {
             value={stats.sesionesHoy}
             icon={Calendar}
             color="orange"
-            action={{ label: 'Ver horario', onClick: () => {} }}
+            action={{ label: 'Ver horario', onClick: () => { } }}
           />
           <StatCard
             title="Asistencia Promedio"
@@ -316,16 +317,16 @@ export default function DocenteDashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Button 
-                onClick={() => navigate('/docente/misgrupos')} 
+              <Button
+                onClick={() => navigate('/docente/misgrupos')}
                 className="h-24 flex flex-col gap-2"
                 size="lg"
               >
                 <QrCode className="h-8 w-8" />
                 <span className="text-sm">Generar QR de Asistencia</span>
               </Button>
-              <Button 
-                onClick={() => navigate('/docente/calificaciones')} 
+              <Button
+                onClick={() => navigate('/docente/calificaciones')}
                 className="h-24 flex flex-col gap-2"
                 size="lg"
                 variant="outline"
@@ -333,8 +334,8 @@ export default function DocenteDashboard() {
                 <ClipboardList className="h-8 w-8" />
                 <span className="text-sm">Registrar Calificaciones</span>
               </Button>
-              <Button 
-                onClick={() => navigate('/docente/MisGrupos')} 
+              <Button
+                onClick={() => navigate('/docente/MisGrupos')}
                 className="h-24 flex flex-col gap-2"
                 size="lg"
                 variant="outline"
@@ -342,14 +343,15 @@ export default function DocenteDashboard() {
                 <Users className="h-8 w-8" />
                 <span className="text-sm">Ver Mis Grupos</span>
               </Button>
-              <Button 
-                onClick={() => navigate('/docente/reportes')} 
+              <Button
+                onClick={() => toast.info('Próximamente: Esta funcionalidad estará disponible en futuras actualizaciones')}
                 className="h-24 flex flex-col gap-2"
                 size="lg"
                 variant="outline"
               >
                 <Award className="h-8 w-8" />
                 <span className="text-sm">Generar Reportes</span>
+                <span className="text-xs text-muted-foreground">(Próximamente)</span>
               </Button>
             </div>
           </CardContent>
@@ -396,8 +398,8 @@ export default function DocenteDashboard() {
                         <Clock className="h-4 w-4 mr-2" />
                         Salón: {grupo.salon || 'Por asignar'}
                       </div>
-                      <Button 
-                        className="w-full mt-4" 
+                      <Button
+                        className="w-full mt-4"
                         variant="outline"
                         onClick={() => navigate(`/docente/grupos/${grupo.id}`)}
                       >
@@ -446,10 +448,10 @@ export default function DocenteDashboard() {
                   <YAxis domain={[0, 10]} />
                   <Tooltip />
                   <Legend />
-                  <Line 
-                    type="monotone" 
-                    dataKey="promedio" 
-                    stroke="#3b82f6" 
+                  <Line
+                    type="monotone"
+                    dataKey="promedio"
+                    stroke="#3b82f6"
                     strokeWidth={2}
                     name="Promedio"
                   />

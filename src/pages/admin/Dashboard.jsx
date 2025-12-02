@@ -8,13 +8,14 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { dashboardService } from '../../services/dashboard.service';
 import { User, Filter, X } from 'lucide-react';
+import { toast } from 'sonner';
 
-import { 
-  Card, 
-  CardContent, 
-  CardDescription, 
-  CardHeader, 
-  CardTitle 
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle
 } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -38,36 +39,36 @@ import {
   BarChart3,
   Clock,
 } from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  LineChart, 
-  Line, 
-  PieChart, 
-  Pie, 
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
   Cell,
   AreaChart,
   Area,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer 
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
 } from 'recharts';
 
 export default function AdminDashboard() {
   const { profile, signOut } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  
+
   // Filtros
   const [filtros, setFiltros] = useState({
     periodo: 'all',
     materiaId: 'all',
     grupoId: 'all'
   });
-  
+
   // Filtros disponibles
   const [filtrosDisponibles, setFiltrosDisponibles] = useState({
     periodos: [],
@@ -236,16 +237,16 @@ export default function AdminDashboard() {
             <GraduationCap className="h-6 w-6 text-primary" />
             <span className="text-xl font-bold">Sistema Académico</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
             <Badge variant="secondary" className="text-sm">
               Administrador
             </Badge>
-            <Button variant="ghost" size="icon">
+            {/* <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
-            </Button>
-            <Button 
-              variant="ghost" 
+            </Button> */}
+            <Button
+              variant="ghost"
               size="icon"
               onClick={() => navigate('/profile')}
               title="Mi Perfil"
@@ -334,7 +335,7 @@ export default function AdminDashboard() {
                   <SelectContent>
                     <SelectItem value="all">Todos los grupos</SelectItem>
                     {filtrosDisponibles.grupos
-                      .filter(g => 
+                      .filter(g =>
                         (filtros.periodo === 'all' || g.periodo === filtros.periodo) &&
                         (filtros.materiaId === 'all' || g.materia === filtrosDisponibles.materias.find(m => m.id === filtros.materiaId)?.nombre)
                       )
@@ -398,37 +399,38 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <Button 
-                onClick={() => navigate('/admin/usuarios')} 
+              <Button
+                onClick={() => navigate('/admin/usuarios')}
                 className="h-20 flex flex-col gap-2"
                 variant="outline"
               >
                 <Users className="h-6 w-6" />
                 <span>Gestionar Usuarios</span>
               </Button>
-              <Button 
-                onClick={() => navigate('/admin/materias')} 
+              <Button
+                onClick={() => navigate('/admin/materias')}
                 className="h-20 flex flex-col gap-2"
                 variant="outline"
               >
                 <BookOpen className="h-6 w-6" />
                 <span>Gestionar Materias</span>
               </Button>
-              <Button 
-                onClick={() => navigate('/admin/grupos')} 
+              <Button
+                onClick={() => navigate('/admin/grupos')}
                 className="h-20 flex flex-col gap-2"
                 variant="outline"
               >
                 <Calendar className="h-6 w-6" />
                 <span>Gestionar Grupos</span>
               </Button>
-              <Button 
-                onClick={() => navigate('/admin/reportes')} 
+              <Button
+                onClick={() => toast.info('Próximamente: Esta funcionalidad estará disponible en futuras actualizaciones')}
                 className="h-20 flex flex-col gap-2"
                 variant="outline"
               >
                 <BarChart3 className="h-6 w-6" />
                 <span>Ver Reportes</span>
+                <span className="text-xs text-muted-foreground">(Próximamente)</span>
               </Button>
             </div>
           </CardContent>
@@ -570,10 +572,10 @@ export default function AdminDashboard() {
                     <YAxis domain={[0, 100]} />
                     <Tooltip />
                     <Legend />
-                    <Area 
-                      type="monotone" 
-                      dataKey="porcentaje" 
-                      stroke="#10b981" 
+                    <Area
+                      type="monotone"
+                      dataKey="porcentaje"
+                      stroke="#10b981"
                       fill="#10b981"
                       fillOpacity={0.6}
                       name="Asistencia (%)"
@@ -603,10 +605,10 @@ export default function AdminDashboard() {
                     <YAxis domain={[0, 10]} />
                     <Tooltip />
                     <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="promedio" 
-                      stroke="#3b82f6" 
+                    <Line
+                      type="monotone"
+                      dataKey="promedio"
+                      stroke="#3b82f6"
                       strokeWidth={3}
                       name="Promedio"
                       dot={{ r: 5 }}

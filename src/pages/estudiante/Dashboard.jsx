@@ -273,9 +273,9 @@ export default function EstudianteDashboard() {
               <p className="text-xs text-muted-foreground">Mat: {profile?.matricula}</p>
             </div>
             <Badge variant="secondary">Estudiante</Badge>
-            <Button variant="ghost" size="icon">
+            {/* <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
-            </Button>
+            </Button> */}
             <Button
               variant="ghost"
               size="icon"
