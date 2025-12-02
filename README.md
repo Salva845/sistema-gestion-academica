@@ -1,29 +1,61 @@
 # 🎓 Sistema de Gestión Académica
 
-Template de Un sistema web moderno y completo para la administración de materias, grupos, asistencias y calificaciones, diseñado para instituciones educativas.
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)
+
+Un sistema web moderno y completo para la administración de materias, grupos, asistencias y calificaciones, diseñado para instituciones educativas.
 
 ---
 
 ## ✨ Características Principales
 
-- **Autenticación Segura:** Sistema de inicio de sesión y registro con protección de rutas.
-- **Roles de Usuario:** Tres roles definidos con permisos específicos: Administrador, Docente y Estudiante.
-- **Gestión Académica:** Módulos para administrar materias, grupos, inscripciones y periodos escolares.
-- **Control de Asistencia:** Sistema innovador con generación y escaneo de códigos QR para el registro de asistencia.
-- **Sistema de Calificaciones:** Registro y consulta de calificaciones por materia y estudiante.
-- **Dashboards Personalizados:** Paneles de control intuitivos que muestran información relevante para cada rol.
-- **Interfaz Moderna:** Diseño responsivo, con modo claro y oscuro, construido con componentes reutilizables.
+- **🔐 Autenticación Robusta:** Sistema seguro de inicio de sesión y registro gestionado por Supabase Auth, con protección de rutas basada en roles.
+- **👥 Roles de Usuario:** Arquitectura multi-rol (Administrador, Docente, Estudiante) con interfaces y permisos personalizados.
+- **📚 Gestión Académica Integral:** Administración eficiente de materias, grupos, inscripciones y periodos escolares.
+- **📱 Control de Asistencia QR:** Sistema innovador que permite a los docentes generar códigos QR dinámicos y a los estudiantes escanearlos para registrar su asistencia al instante.
+- **📊 Sistema de Calificaciones:** Registro detallado y consulta de calificaciones, con cálculo automático de promedios.
+- **📈 Dashboards Interactivos:** Paneles de control visuales con gráficos (Recharts) para visualizar estadísticas clave.
+- **🎨 Interfaz Moderna y Responsiva:** Diseño limpio y profesional utilizando Tailwind CSS y componentes de Radix UI, totalmente adaptable a dispositivos móviles y con soporte para modo oscuro.
+- **⚡ Feedback en Tiempo Real:** Notificaciones instantáneas (Sonner) para confirmar acciones y alertar sobre eventos importantes.
 
 ---
 
 ## 🛠️ Tecnologías Utilizadas
 
-| Área      | Tecnología                                                      |
-|-----------|----------------------------------------------------------------|
-| Frontend  | React, Vite, Tailwind CSS, React Router, Radix UI             |
-| Backend   | Supabase (Base de Datos PostgreSQL, Autenticación, Storage, RLS) |
-| Lenguaje  | JavaScript (JSX)                                               |
-| CI/CD     | GitHub Actions                                                 |
+Este proyecto utiliza un stack moderno y potente para garantizar rendimiento, escalabilidad y una excelente experiencia de desarrollador.
+
+### Frontend
+| Categoría | Tecnología | Descripción |
+|-----------|------------|-------------|
+| **Core** | [React](https://react.dev/) | Biblioteca principal para la interfaz de usuario. |
+| **Build Tool** | [Vite](https://vitejs.dev/) | Entorno de desarrollo ultrarrápido. |
+| **Lenguaje** | JavaScript (JSX) | |
+| **Estilos** | [Tailwind CSS](https://tailwindcss.com/) | Framework de utilidades para diseño rápido. |
+| **Componentes** | [Radix UI](https://www.radix-ui.com/) | Primitivas de componentes accesibles y sin estilos. |
+| **Iconos** | [Lucide React](https://lucide.dev/) | Iconos vectoriales ligeros y consistentes. |
+
+### Estado y Datos
+| Categoría | Tecnología | Descripción |
+|-----------|------------|-------------|
+| **Estado Global** | [Zustand](https://github.com/pmndrs/zustand) | Gestión de estado ligera y simple. |
+| **Data Fetching** | [TanStack Query](https://tanstack.com/query/latest) | Gestión de estado asíncrono, caché y sincronización. |
+| **Formularios** | [React Hook Form](https://react-hook-form.com/) | Manejo de formularios performante. |
+| **Validación** | [Zod](https://zod.dev/) | Validación de esquemas TypeScript-first. |
+
+### Backend y Servicios
+| Categoría | Tecnología | Descripción |
+|-----------|------------|-------------|
+| **BaaS** | [Supabase](https://supabase.com/) | Backend as a Service (PostgreSQL, Auth, Realtime). |
+| **Base de Datos** | PostgreSQL | Base de datos relacional robusta. |
+| **Seguridad** | RLS (Row Level Security) | Políticas de acceso a nivel de fila en la base de datos. |
+
+### Utilidades Extra
+- **Gráficos:** [Recharts](https://recharts.org/)
+- **Fechas:** [date-fns](https://date-fns.org/)
+- **QR:** [html5-qrcode](https://github.com/mebjas/html5-qrcode) y [qrcode.react](https://github.com/zpao/qrcode.react)
+- **Notificaciones:** [Sonner](https://sonner.emilkowal.ski/)
 
 ---
 
@@ -89,11 +121,12 @@ Abre [http://localhost:5173](http://localhost:5173) en tu navegador para ver la 
 ```
 sistema-gestion-academica/
 ├── src/
-│   ├── components/       # Componentes reutilizables de UI
-│   ├── pages/           # Páginas principales de la aplicación
-│   ├── lib/             # Configuración de Supabase y utilidades
-│   ├── hooks/           # Custom hooks de React
-│   └── App.jsx          # Componente principal
+│   ├── components/       # Componentes reutilizables de UI (Botones, Inputs, Cards...)
+│   ├── pages/           # Páginas principales divididas por módulos (Admin, Docente, Estudiante)
+│   ├── lib/             # Configuración de clientes (Supabase, QueryClient) y utilidades
+│   ├── hooks/           # Custom hooks para lógica reutilizable (useAuth, useToast...)
+│   ├── stores/          # Stores de Zustand para estado global
+│   └── App.jsx          # Componente principal y configuración de rutas
 ├── public/              # Archivos estáticos
 ├── schema.sql           # Script de configuración de la base de datos
 ├── .env.example         # Ejemplo de variables de entorno
@@ -131,21 +164,7 @@ El proyecto implementa múltiples capas de seguridad:
 - **Row Level Security (RLS)** en Supabase para control de acceso a nivel de base de datos
 - **Autenticación JWT** mediante Supabase Auth
 - **Protección de rutas** en el frontend según roles de usuario
-- **Validación de datos** tanto en cliente como en servidor
-
----
-
-## 🤝 Contribuciones
-
-¡Las contribuciones son bienvenidas! Si quieres mejorar el proyecto o reportar algún problema, contáctame a [salvadorsoberanis65@gmail.com](mailto:salvadorsoberanis65@gmail.com).
-
-### Pasos para Contribuir
-
-1. Haz un fork del proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/AmazingFeature`)
-3. Commit tus cambios (`git commit -m 'Add some AmazingFeature'`)
-4. Push a la rama (`git push origin feature/AmazingFeature`)
-5. Abre un Pull Request
+- **Validación de datos** tanto en cliente (Zod) como en servidor
 
 ---
 
@@ -154,15 +173,6 @@ El proyecto implementa múltiples capas de seguridad:
 **Salvador Soberanis**  
 📧 Email: salvadorsoberanis65@gmail.com  
 🔗 GitHub: [@salva845](https://github.com/salva845)
-
----
-
-## 🙏 Agradecimientos
-
-- [Supabase](https://supabase.com/) - Por proporcionar una plataforma backend completa
-- [React](https://react.dev/) - Framework de UI
-- [Tailwind CSS](https://tailwindcss.com/) - Framework de estilos
-- [Radix UI](https://www.radix-ui.com/) - Componentes accesibles
 
 ---
 

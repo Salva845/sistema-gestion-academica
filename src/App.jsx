@@ -50,6 +50,7 @@ function App() {
 
   return (
     <BrowserRouter>
+      <Toaster richColors position="top-center" />
       <AuthProvider>
         <Suspense fallback={<Loading />}>
           <Routes>
